@@ -13,6 +13,7 @@ from colorama import Fore, Style, init, Back
 from GameManager import GameManager
 from KahootPlayer import Player
 from KahootRoom import Room
+from NetworkHelpers import NetworkHelpers
 
 
 init(autoreset=True)
@@ -49,6 +50,7 @@ class KahootServer:
         self.server_socket = socket.socket()
         self.server_socket.bind(self.server_address)
         self.game_control = GameManager()
+        self.network_helper = NetworkHelpers()
         
         # State machine tracking
         self.client_state = {}  # Maps socket -> state
@@ -198,11 +200,11 @@ class KahootServer:
         if text_lower == "start":
             room.game_started = True
             _log_info(f"Game started in room {room.room_id}")
-            self._broadcast_room(room, "Game starting now!\n")
+            self.network_helper._broadcast_room(room, "Game starting now!\n")
             # Mark players as in-game
             for p in room.players:
                 self.client_state[p.conn] = STATE_IN_GAME
-            self.run_room_game(room)
+            self.game_control.run_room_game(room)
 
         elif text_lower == "list":
             players_str = ", ".join([p.username for p in room.players])
@@ -229,14 +231,6 @@ class KahootServer:
             msg = f"Room {room_id} - Host: {room.host_client.username}, Players: {len(room.players)}\n"
             try:
                 conn.sendall(msg.encode())
-            except:
-                pass
-
-    def _broadcast_room(self, room, message):
-        """Send message to all players in a room."""
-        for player in list(room.players):
-            try:
-                player.conn.sendall(message.encode())
             except:
                 pass
 
@@ -276,114 +270,6 @@ class KahootServer:
     def clear_client_screens(self):
         """Clear screens for all clients."""
         self.broadcast("\033[H\033[2J")
-
-    def run_room_game(self, room):
-        """Run trivia game for a specific room (blocking while game runs)."""
-        questions = self.game_control._load_questions()
-        if isinstance(questions, str):
-            try:
-                questions = json.loads(questions)
-            except:
-                questions = []
-
-        for i, q_data in enumerate(questions):
-            if not room.players:
-                break
-
-            self._clear_room_screens(room)
-            q_text, o1, o2, o3, o4, correct = q_data
-            correct = str(correct).strip()
-
-            prompt = (
-                f"Question {i+1}:\n{q_text}\n"
-                f"1) {o1}\n2) {o2}\n3) {o3}\n4) {o4}\n\n"
-                f"Answer (1-4): "
-            )
-            self._broadcast_room(room, prompt)
-
-            # Collect answers
-            answered = set()
-            answers = {}
-            deadline = time.time() + 45  # 45 second timeout per question
-
-            while time.time() < deadline and len(answered) < len(room.players):
-                try:
-                    readable, _, _ = select.select(
-                        [p.conn for p in room.players],
-                        [], [],
-                        1
-                    )
-                except:
-                    continue
-
-                for sock in readable:
-                    if sock in answered:
-                        continue
-
-                    try:
-                        data = sock.recv(1024)
-                    except:
-                        continue
-
-                    if not data:
-                        continue
-
-                    text = data.decode(errors="ignore").strip()
-                    answer = None
-                    for ch in text:
-                        if ch in "1234":
-                            answer = ch
-                            break
-
-                    if not answer:
-                        try:
-                            sock.sendall(b"Invalid. Type 1-4.\n")
-                        except:
-                            pass
-                        continue
-
-                    answers[sock] = answer
-                    for p in room.players:
-                        if p.conn is sock:
-                            if answer == correct:
-                                room.scores[p] = room.scores.get(p, 0) + 1
-                                try:
-                                    sock.sendall(b"Correct!\n")
-                                except:
-                                    pass
-                            else:
-                                try:
-                                    sock.sendall(b"Wrong!\n")
-                                except:
-                                    pass
-                            answered.add(sock)
-                            break
-
-            # Show results
-            time.sleep(2)
-
-        # Show leaderboard
-        self.show_room_leaderboard(room)
-
-    def _clear_room_screens(self, room):
-        """Clear terminal for room players."""
-        self._broadcast_room(room, "\033[H\033[2J")
-
-    def show_room_leaderboard(self, room):
-        """Display final scores for room."""
-        self._clear_room_screens(room)
-        sorted_results = sorted(room.scores.items(), key=lambda x: x[1], reverse=True)
-        msg = "\n=== FINAL SCORES ===\n"
-        for i, (player, score) in enumerate(sorted_results, 1):
-            msg += f"{i}. {player.username}: {score} points\n"
-        msg += "\nThanks for playing!\n"
-        self._broadcast_room(room, msg)
-        self._close_room(room)
-
-    def show_leaderboard(self):
-        """Display final global leaderboard."""
-        self.clear_client_screens()
-        # Not implemented for room mode
 
 
 if __name__ == "__main__":

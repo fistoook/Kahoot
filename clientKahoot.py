@@ -113,8 +113,14 @@ class KahootClient:
             if command:
                 self._send_line(command)
 
+        if "Invalid answer" in lowered:
+            print("Type 1, 2, 3, or 4 and press Enter.")
+            answer = input().strip()
+            if answer:
+                self._send_line(answer)
+
     def _send_line(self, line):
-        # Always send a single line with newline terminator.
+        # Always send a single line with newline therminator.
         if not self.is_running:
             return
         try:

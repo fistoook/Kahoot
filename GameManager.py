@@ -1,34 +1,34 @@
 import socket
 import random
 import csv
-import json
 from colorama import Fore, Style, init, Back
-def _log_warn(message):
-    """Log a warning message in yellow."""
-    print(f"{Fore.YELLOW}{Style.BRIGHT}[WARN]{Style.RESET_ALL} {message}")
+import time
+import select
+from NetworkHelpers import NetworkHelpers
+init(autoreset=True)
+
+_log_warn = lambda msg: print(f"{Fore.YELLOW}{Style.BRIGHT}[WARN]{Style.RESET_ALL} {msg}")
 ################## Game Logic ###################
 class GameManager:
     def __init__(self):
         self.rooms = {}
-        
-
-    
+        self.game_questions_count = 5
+        self.timeout = 20
+        self.network_helper = NetworkHelpers()
 
     def run_room_game(self, room):
+        print(f"Starting game in {room} with {len(room.players)} players.")
         """Run the game loop for a specific room with independent scores."""
-        questions = self.game_control._load_questions()
-        if isinstance(questions, str):
-            try:
-                questions = json.loads(questions)
-            except json.JSONDecodeError:
-                questions = []
+        room.questions = self._load_questions()
+        print(f"Loaded {len(room.questions)} questions for {room}.")
+        print(room.questions)  # Debug: print loaded questions
 
-        for i, q_data in enumerate(questions):
+        for i, q_data in enumerate(room.questions):
             if not room.players:
                 _log_warn("No players left in room. Ending game.")
                 break
 
-            self._clear_room_screens(room)
+            self.clear_room_screens(room)
 
             # Parse question data
             q_text, o1, o2, o3, o4, correct = q_data
@@ -44,7 +44,7 @@ class GameManager:
                 f"4) {o4}\n\n"
                 f"You have {self.timeout} seconds. Type 1-4 and press Enter:\n"
             )
-            self._broadcast_room(room, prompt)
+            self.network_helper._broadcast_room(room, prompt)
 
             # Collect answers from room players
             answered_this_round = set()
@@ -96,12 +96,12 @@ class GameManager:
                     if player is not None and answer == correct:
                         room.scores[player] = room.scores.get(player, 0) + 1
                         try:
-                            s.sendall(b" Correct!\n")
+                            self.network_helper.send_line(s, " Correct!")
                         except (ConnectionError, OSError):
                             self._drop_client(s)
                     else:
                         try:
-                            s.sendall(b" Wrong!\n")
+                            self.network_helper.send_line(s, " Wrong!")
                         except (ConnectionError, OSError):
                             self._drop_client(s)
                     answered_this_round.add(s)
@@ -128,12 +128,30 @@ class GameManager:
             if no_answer_players:
                 summary += f" No answer: {no_answer_players} players\n"
 
-            self._broadcast_room(room, summary)
-            self._broadcast_room(room, "Moving to next question...\n")
+            self.network_helper._broadcast_room(room, summary)
+            self.network_helper._broadcast_room(room, "Moving to next question...\n")
             time.sleep(3.5)  # Pause before next question
 
         # Display room-specific leaderboard when game ends
         self.show_room_leaderboard(room)
+
+    def clear_room_screens(self, room):
+        for p in room.players:
+            try:
+                self.network_helper.send_line(p.conn, "\033[2J\033[H")  # Clear screen ANSI code
+            except (ConnectionError, OSError):
+                self._drop_client(p.conn)
+
+    def _load_questions(self, filename='for questions.csv'):
+        with open(filename, 'r', encoding='utf-8', newline='') as file:
+            reader = csv.reader(file)
+            all_questions = []
+            for row in reader:
+                if len(row) != 6:
+                    continue
+                all_questions.append([cell.strip() for cell in row])
+
+        return random.sample(all_questions, min(len(all_questions), self.game_questions_count))
 
     def show_leaderboard(self):
         """Display the global game leaderboard and close the server."""
@@ -190,4 +208,4 @@ class GameManager:
             leaderboard_msg += f"{place}. {players} with {score} points\n"
             place += len(rankings[score])
 
-        self._broadcast_room(room, leaderboard_msg + "\nThanks for playing!\n")
+        self.network_helper._broadcast_room(room, leaderboard_msg + "\nThanks for playing!\n")
