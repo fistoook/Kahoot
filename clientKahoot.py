@@ -1,7 +1,5 @@
 import socket
-import sys
 from colorama import Fore, Style, init
-
 
 init(autoreset=True)
 
@@ -35,6 +33,7 @@ class KahootClient:
             return False
 
     def start(self):
+        # Single-threaded loop: wait for server messages, then respond with input.
         if not self.is_running:
             if not self.connect():
                 return
@@ -47,6 +46,7 @@ class KahootClient:
             self.close()
 
     def _receive_messages(self):
+        # Blocking receive to align with server-driven protocol.
         try:
             data = self.client_socket.recv(4096)
         except Exception:
@@ -64,6 +64,7 @@ class KahootClient:
         self._handle_prompts(text)
 
     def _handle_prompts(self, text):
+        # Map server prompts to local input collection.
         lowered = text.lower()
 
         if not self.name_sent and "enter your username" in lowered:
@@ -80,7 +81,18 @@ class KahootClient:
                 self._send_line(command)
             return
 
-        if "invalid command" in lowered or "invalid room id" in lowered or "game name cannot be empty" in lowered:
+        if (
+            "invalid command" in lowered
+            or "invalid room id" in lowered
+            or "game name cannot be empty" in lowered
+            or "invalid host command" in lowered
+        ):
+            command = input().strip()
+            if command:
+                self._send_line(command)
+            return
+
+        if "type start" in lowered and "list" in lowered and "close" in lowered:
             command = input().strip()
             if command:
                 self._send_line(command)
@@ -92,6 +104,7 @@ class KahootClient:
                 self._send_line(answer)
 
     def _send_line(self, line):
+        # Always send a single line with newline terminator.
         if not self.is_running:
             return
         try:
