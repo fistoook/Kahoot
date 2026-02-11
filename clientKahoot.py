@@ -1,6 +1,5 @@
 import socket
 import sys
-import msvcrt
 from colorama import Fore, Style, init
 
 
@@ -39,13 +38,9 @@ class KahootClient:
         if not self.is_running:
             if not self.connect():
                 return
-        self.client_socket.setblocking(False)
-        input_buffer = []
-
         try:
             while self.is_running:
                 self._receive_messages()
-                self._handle_keyboard(input_buffer)
         except KeyboardInterrupt:
             _log_warn("Player exited the game.")
         finally:
@@ -54,8 +49,6 @@ class KahootClient:
     def _receive_messages(self):
         try:
             data = self.client_socket.recv(4096)
-        except BlockingIOError:
-            return
         except Exception:
             self.is_running = False
             return
@@ -68,36 +61,35 @@ class KahootClient:
         text = data.decode(errors="ignore")
         print(text, end="", flush=True)
 
-        if not self.name_sent:
-            lowered = text.lower()
-            if "enter your username" in lowered or "enter your name" in lowered:
-                name = input().strip()
-                if not name:
-                    name = "Player"
-                self._send_line(name)
-                self.name_sent = True
+        self._handle_prompts(text)
 
-    def _handle_keyboard(self, input_buffer):
-        while msvcrt.kbhit():
-            ch = msvcrt.getwch()
-            if ch == "\r":
-                line = "".join(input_buffer).strip()
-                input_buffer.clear()
-                sys.stdout.write("\n")
-                sys.stdout.flush()
-                if line:
-                    self._send_line(line)
-            elif ch == "\b":
-                if input_buffer:
-                    input_buffer.pop()
-                    sys.stdout.write("\b \b")
-                    sys.stdout.flush()
-            elif ch == "\x03":
-                raise KeyboardInterrupt
-            else:
-                input_buffer.append(ch)
-                sys.stdout.write(ch)
-                sys.stdout.flush()
+    def _handle_prompts(self, text):
+        lowered = text.lower()
+
+        if not self.name_sent and "enter your username" in lowered:
+            name = input().strip()
+            if not name:
+                name = "Player"
+            self._send_line(name)
+            self.name_sent = True
+            return
+
+        if "join <room id>" in lowered or "host <game name>" in lowered:
+            command = input().strip()
+            if command:
+                self._send_line(command)
+            return
+
+        if "invalid command" in lowered or "invalid room id" in lowered or "game name cannot be empty" in lowered:
+            command = input().strip()
+            if command:
+                self._send_line(command)
+            return
+
+        if "type 1-4" in lowered or "type 1, 2, 3, or 4" in lowered:
+            answer = input().strip()
+            if answer:
+                self._send_line(answer)
 
     def _send_line(self, line):
         if not self.is_running:
