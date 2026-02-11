@@ -102,6 +102,16 @@ class KahootClient:
             answer = input().strip()
             if answer:
                 self._send_line(answer)
+        if "players:" in lowered :
+            print("select again START or LIST or CLOSE")
+            command = input().strip()
+            if command:
+                self._send_line(command)
+        if "room closed" in lowered:
+            print("Type 'Host <game name>' to host or 'Join <room ID>' to join.")
+            command = input().strip()
+            if command:
+                self._send_line(command)
 
     def _send_line(self, line):
         # Always send a single line with newline terminator.

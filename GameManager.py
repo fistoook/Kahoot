@@ -2,11 +2,15 @@ import socket
 import random
 import csv
 import json
-
+from colorama import Fore, Style, init, Back
+def _log_warn(message):
+    """Log a warning message in yellow."""
+    print(f"{Fore.YELLOW}{Style.BRIGHT}[WARN]{Style.RESET_ALL} {message}")
 ################## Game Logic ###################
 class GameManager:
     def __init__(self):
         self.rooms = {}
+        
 
     
 
