@@ -1,5 +1,5 @@
 class Player:
-    def __init__(self, client_id, username):
-        self.client_id = client_id
+    def __init__(self, conn, username):
+        self.conn = conn
         self.username = username
         self.score = 0
