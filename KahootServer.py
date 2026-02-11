@@ -1,12 +1,13 @@
 import socket
 import select
-import json
 import time
+from colorama import Fore, Style, init, Back
 from GameManager import GameManager
 from KahootPlayer import Player
 from KahootRoom import Room
 
 
+init(autoreset=True)
 CLIENT_DISCONNECTED = "CLIENT_DISCONNECTED"
 CLIENT_RESPONSE_TIMEOUT = 30
 ################## Client Handling ###################
@@ -24,7 +25,7 @@ class KahootServer:
         # Listen for incoming connections
         self.server_socket.listen(self.num_players)
 
-        print(f"Server started on {self.server_address}. Waiting for {self.num_players} players...")
+        print(f"{Fore.GREEN}Server started on {self.server_address}. Waiting for players...{Style.RESET_ALL}")
 
         while len(self.clients) < self.num_players:
             # Use select to wait for incoming connections with a timeout
