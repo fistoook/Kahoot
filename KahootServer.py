@@ -10,12 +10,17 @@ from KahootRoom import Room
 init(autoreset=True)
 CLIENT_DISCONNECTED = "CLIENT_DISCONNECTED"
 CLIENT_RESPONSE_TIMEOUT = 30
+
+def _log_info(message):
+    print(f"{Fore.CYAN}{Style.BRIGHT}[INFO]{Style.RESET_ALL} {message}")
+
+def _log_warn(message):
+    print(f"{Fore.YELLOW}{Style.BRIGHT}[WARN]{Style.RESET_ALL} {message}")
 ################## Client Handling ###################
 class KahootServer:
-    def __init__(self, host='0.0.0.0', port=5555):
+    def __init__(self, host='127.0.0.1', port=5555):
         self.server_address = (host, port)
         self.num_players = 50
-        self.timeout = 90 
         self.clients = []
         self.server_socket = socket.socket()
         self.server_socket.bind(self.server_address)
@@ -25,7 +30,7 @@ class KahootServer:
         # Listen for incoming connections
         self.server_socket.listen(self.num_players)
 
-        print(f"{Fore.GREEN}Server started on {self.server_address}. Waiting for players...{Style.RESET_ALL}")
+        _log_info(f"Server started on {self.server_address}. Waiting for players...")
 
         while len(self.clients) < self.num_players:
             # Use select to wait for incoming connections with a timeout
@@ -83,7 +88,7 @@ class KahootServer:
 
         # Add new player to the list of clients
         self.clients.append(Player(conn, name))
-        print(f"Player {len(self.clients)} connected from {addr} as '{name}'")
+        _log_info(f"Player {len(self.clients)} connected from {addr} as '{name}'")
 
         # Update lobby status for all clients
         self.broadcast(f"Lobby: {len(self.clients)}/{self.num_players} players connected.\n")
@@ -188,7 +193,7 @@ class KahootServer:
         self.questions = self.game_control._load_questions()
         for i, q_data in enumerate(self.questions):
             if not self.clients:
-                print("No players left. Ending game.")
+                _log_warn("No players left. Ending game.")
                 break
 
             self.clear_client_screens()

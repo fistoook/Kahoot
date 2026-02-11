@@ -1,56 +1,111 @@
 import socket
 import sys
-import threading
+import msvcrt
+from colorama import Fore, Style, init
+
+
+init(autoreset=True)
+
+def _log_info(message):
+    print(f"{Fore.CYAN}{Style.BRIGHT}[INFO]{Style.RESET_ALL} {message}")
+
+def _log_warn(message):
+    print(f"{Fore.YELLOW}{Style.BRIGHT}[WARN]{Style.RESET_ALL} {message}")
+
+def _log_error(message):
+    print(f"{Fore.RED}{Style.BRIGHT}[ERROR]{Style.RESET_ALL} {message}")
 
 class KahootClient:
-    def __init__(self, host='0.0.0.0', port=5555):
+    def __init__(self, host='127.0.0.1', port=5555):
         self.server_address = (host, port)
         self.client_socket = socket.socket()
         self.is_running = False
+        self.name_sent = False
 
     def connect(self):
         try:
             self.client_socket.connect(self.server_address)
-            print(f"[*] Connected to Kahoot server at {self.server_address[0]}:{self.server_address[1]}")
+            _log_info(f"Connected to Kahoot server at {self.server_address[0]}:{self.server_address[1]}")
             self.is_running = True
             return True
         except ConnectionRefusedError:
-            print("[!] Error: Could not connect to server. Is it running?")
+            _log_error("Could not connect to server. Is it running?")
             return False
         except Exception as e:
-            print(f"[!] Unexpected error during connection: {e}")
+            _log_error(f"Unexpected error during connection: {e}")
             return False
 
     def start(self):
         if not self.is_running:
             if not self.connect():
                 return
-
-        receiver = threading.Thread(target=self._receive_loop, daemon=True)
-        receiver.start()
+        self.client_socket.setblocking(False)
+        input_buffer = []
 
         try:
             while self.is_running:
-                message = sys.stdin.readline()
-                if message and self.is_running:
-                    self.client_socket.sendall(message.encode())
+                self._receive_messages()
+                self._handle_keyboard(input_buffer)
         except KeyboardInterrupt:
-            print("\n[*] Player exited the game.")
+            _log_warn("Player exited the game.")
         finally:
             self.close()
 
-    def _receive_loop(self):
-        while self.is_running:
-            try:
-                data = self.client_socket.recv(4096)
-                if not data:
-                    print("\n[!] Connection closed by server.")
-                    self.is_running = False
-                    break
-                print(data.decode(errors="ignore"), end="", flush=True)
-            except Exception:
-                self.is_running = False
-                break
+    def _receive_messages(self):
+        try:
+            data = self.client_socket.recv(4096)
+        except BlockingIOError:
+            return
+        except Exception:
+            self.is_running = False
+            return
+
+        if not data:
+            _log_warn("Connection closed by server.")
+            self.is_running = False
+            return
+
+        text = data.decode(errors="ignore")
+        print(text, end="", flush=True)
+
+        if not self.name_sent:
+            lowered = text.lower()
+            if "enter your username" in lowered or "enter your name" in lowered:
+                name = input().strip()
+                if not name:
+                    name = "Player"
+                self._send_line(name)
+                self.name_sent = True
+
+    def _handle_keyboard(self, input_buffer):
+        while msvcrt.kbhit():
+            ch = msvcrt.getwch()
+            if ch == "\r":
+                line = "".join(input_buffer).strip()
+                input_buffer.clear()
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                if line:
+                    self._send_line(line)
+            elif ch == "\b":
+                if input_buffer:
+                    input_buffer.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+            elif ch == "\x03":
+                raise KeyboardInterrupt
+            else:
+                input_buffer.append(ch)
+                sys.stdout.write(ch)
+                sys.stdout.flush()
+
+    def _send_line(self, line):
+        if not self.is_running:
+            return
+        try:
+            self.client_socket.sendall((line + "\n").encode())
+        except Exception:
+            self.is_running = False
 
     def close(self):
         self.is_running = False
@@ -58,7 +113,7 @@ class KahootClient:
             self.client_socket.close()
         except:
             pass
-        print("[*] Client socket closed.")
+        _log_info("Client socket closed.")
 
 
 if __name__ == "__main__":
