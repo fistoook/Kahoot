@@ -12,16 +12,17 @@ _log_warn = lambda msg: print(f"{Fore.YELLOW}{Style.BRIGHT}[WARN]{Style.RESET_AL
 class GameManager:
     def __init__(self):
         self.rooms = {}
-        self.game_questions_count = 5
+        self.game_questions_count = 2
         self.timeout = 20
         self.network_helper = NetworkHelpers()
+        self.theme = "general"
 
-    def run_room_game(self, room):
-        print(f"Starting game in {room} with {len(room.players)} players.")
+    def run_room_game(self, room, num_questions=None):
+        self.theme = room.theme
         """Run the game loop for a specific room with independent scores."""
-        room.questions = self._load_questions()
-        print(f"Loaded {len(room.questions)} questions for {room}.")
-        print(room.questions)  # Debug: print loaded questions
+        if num_questions is None:
+            num_questions = self.game_questions_count
+        room.questions = self._load_questions(num_questions=num_questions)
 
         for i, q_data in enumerate(room.questions):
             if not room.players:
@@ -36,7 +37,7 @@ class GameManager:
 
             # Format and broadcast question to room
             prompt = (
-                f"Question {i+1}/{self.game_questions_count}:\n"
+                f"Question {i+1}/{num_questions}:\n"
                 f"{q_text}\n"
                 f"1) {o1}\n"
                 f"2) {o2}\n"
@@ -78,14 +79,13 @@ class GameManager:
 
                     # Extract first digit 1-4 from response
                     answer = None
-                    for ch in text:
-                        if ch in "1234":
-                            answer = ch
-                            break
+                    if text == "1" or text == "2" or text == "3" or text == "4":
+                        answer = text.strip()
+                        
 
                     if answer is None:
                         try:
-                            s.sendall(b"Invalid answer. Type 1, 2, 3, or 4 and press Enter.\n")
+                            self.network_helper.send_line(s, "Invalid answer. Type 1, 2, 3, or 4 and press Enter.")
                         except (ConnectionError, OSError):
                             self._drop_client(s)
                         continue
@@ -142,16 +142,42 @@ class GameManager:
             except (ConnectionError, OSError):
                 self._drop_client(p.conn)
 
-    def _load_questions(self, filename='for questions.csv'):
-        with open(filename, 'r', encoding='utf-8', newline='') as file:
-            reader = csv.reader(file)
-            all_questions = []
-            for row in reader:
-                if len(row) != 6:
-                    continue
-                all_questions.append([cell.strip() for cell in row])
+    def _load_questions(self, filename=None, num_questions=None):
+        print(self.theme)
+        if num_questions is None:
+            num_questions = self.game_questions_count
+        
+        # Map theme to CSV filename
+        if filename is None:
+            theme_files = {
+                "general": "questions/for questions.csv",
+                "math": "questions/for math.csv",
+                "cyber": "questions/for cybersec.csv",
+                "nature": "questions/for nature.csv"
+            }
+            filename = theme_files.get(self.theme, "questions/for questions.csv")
+        
+        try:
+            with open(filename, 'r', encoding='utf-8', newline='') as file:
+                reader = csv.reader(file)
+                all_questions = []
+                for row in reader:
+                    if len(row) != 6:
+                        continue
+                    all_questions.append([cell.strip() for cell in row])
 
-        return random.sample(all_questions, min(len(all_questions), self.game_questions_count))
+            return random.sample(all_questions, min(len(all_questions), num_questions))
+        except FileNotFoundError:
+            # Fallback to default questions if theme file doesn't exist
+            with open('questions/for questions.csv', 'r', encoding='utf-8', newline='') as file:
+                reader = csv.reader(file)
+                all_questions = []
+                for row in reader:
+                    if len(row) != 6:
+                        continue
+                    all_questions.append([cell.strip() for cell in row])
+
+            return random.sample(all_questions, min(len(all_questions), num_questions))
 
     def show_leaderboard(self):
         """Display the global game leaderboard and close the server."""
@@ -189,7 +215,7 @@ class GameManager:
 
     def show_room_leaderboard(self, room):
         """Display the leaderboard for a specific room and clean up."""
-        self._clear_room_screens(room)
+        self.clear_room_screens(room)
         sorted_results = sorted(room.scores.items(), key=lambda item: item[1], reverse=True)
         leaderboard_msg = "\n--- FINAL LEADERBOARD ---\n"
         rankings = {}  # Group players by score

@@ -1,0 +1,100 @@
+What is a strong password?,123456,password,MixChars,name,3
+What does a Firewall do?,Heat,Block,Cook,Burn,2
+What is Phishing?,Fishing,Scam,Sport,Game,2
+What is a Virus?,Bug,Malware,Germ,Dirt,2
+What is Spam?,Ham,JunkMail,Meat,Food,2
+What protects your data?,Lock,Encryption,Box,Bag,2
+What is a Hacker?,Cook,Intruder,Driver,Baker,2
+What is Malware?,GoodWare,BadSoft,HardWare,SoftWare,2
+What is a Trojan?,Horse,Virus,Gift,Toy,2
+What is Spyware?,Game,SpyTool,Movie,Book,2
+What is Ransomware?,Game,LockData,Movie,Book,2
+What is a Botnet?,Robot,Network,Toy,Game,2
+What is a Keylogger?,Lock,SpyType,Key,Door,2
+What is a Zero-Day?,Holiday,NewBug,Party,Event,2
+What is a Patch?,Cloth,FixCode,Toy,Game,2
+What is 2FA?,Game,DoubleLock,Movie,Book,2
+What is VPN?,Game,Tunnel,Movie,Book,2
+What is IP?,Address,Person,Game,Toy,1
+What is MAC?,Food,Address,Game,Toy,2
+What is HTTPS?,SecureWeb,Game,Movie,Book,1
+What is SSL?,Train,SecureLayer,Game,Toy,2
+What is DDoS?,Attack,Game,Movie,Book,1
+What is SQL Injection?,Shot,HackDB,Game,Toy,2
+What is XSS?,Game,ScriptHack,Movie,Book,2
+What is Social Engineering?,Party,TrickPeople,Game,Toy,2
+What is a White Hat?,Chef,GoodHacker,Toy,Game,2
+What is a Black Hat?,Witch,BadHacker,Toy,Game,2
+What is a Grey Hat?,MixHacker,Hat,Toy,Game,1
+What is a Bug Bounty?,Hunt,Reward,Game,Toy,2
+What is a Sandbox?,Play,TestArea,Beach,Toy,2
+What is a Honeypot?,Food,Trap,Game,Toy,2
+What is a Backdoor?,Gate,SecretEntry,Toy,Game,2
+What is a Rootkit?,Plant,AdminTool,Game,Toy,2
+What is a Worm?,Animal,SelfSpread,Game,Toy,2
+What is Adware?,Ads,Game,Movie,Book,1
+What is Bloatware?,Fat,JunkApps,Game,Toy,2
+What is Shareware?,Free,TrialSoft,Game,Toy,2
+What is Freeware?,FreeSoft,Game,Movie,Book,1
+What is Open Source?,FreeCode,Game,Movie,Book,1
+What is Closed Source?,PrivateCode,Game,Movie,Book,1
+What is a Script Kiddie?,Child,NewHacker,Game,Toy,2
+What is a Hacktivist?,Actor,PoliticalHack,Game,Toy,2
+What is Cyberwar?,Game,NetWar,Movie,Book,2
+What is Cybercrime?,Game,NetCrime,Movie,Book,2
+What is Identity Theft?,StealID,Game,Movie,Book,1
+What is Data Breach?,Leak,Game,Movie,Book,1
+What is Encryption?,Code,Scramble,Game,Toy,2
+What is Decryption?,Decode,Unscramble,Game,Toy,2
+What is Hashing?,Mixing,OneWayCode,Game,Toy,2
+What is Salting?,Cooking,AddData,Game,Toy,2
+What is Brute Force?,Strong,GuessPass,Game,Toy,2
+What is Dictionary Attack?,Book,WordGuess,Game,Toy,2
+What is Rainbow Table?,Color,HashList,Game,Toy,2
+What is Man-in-the-Middle?,Ref,Intercept,Game,Toy,2
+What is Session Hijacking?,StealSession,Game,Movie,Book,1
+What is Spoofing?,Fake,Game,Movie,Book,1
+What is Sniffing?,Smell,CaptureNet,Game,Toy,2
+What is Port Scanning?,Look,FindOpenPort,Game,Toy,2
+What is Vulnerability?,Weakness,Game,Movie,Book,1
+What is Exploit?,UseWeakness,Game,Movie,Book,1
+What is Payload?,Load,MaliciousCode,Game,Toy,2
+What is Threat?,Danger,Game,Movie,Book,1
+What is Risk?,Chance,Game,Movie,Book,1
+What is Asset?,Value,Game,Movie,Book,1
+What is Attack Vector?,Path,Game,Movie,Book,1
+What is Attack Surface?,Area,Game,Movie,Book,1
+What is Defense in Depth?,Layers,Game,Movie,Book,1
+What is Least Privilege?,MinAccess,Game,Movie,Book,1
+What is Separation of Duties?,SplitTasks,Game,Movie,Book,1
+What is Need to Know?,Secret,Game,Movie,Book,1
+What is CIA Triad?,Agency,SecModel,Game,Toy,2
+What is Confidentiality?,Privacy,Game,Movie,Book,1
+What is Integrity?,Accuracy,Game,Movie,Book,1
+What is Availability?,Uptime,Game,Movie,Book,1
+What is Authentication?,VerifyID,Game,Movie,Book,1
+What is Authorization?,Permission,Game,Movie,Book,1
+What is Accounting?,Money,Tracking,Game,Toy,2
+What is Non-repudiation?,Proof,Game,Movie,Book,1
+What is Digital Signature?,Sign,VerifySender,Game,Toy,2
+What is Certificate?,Award,DigitalID,Game,Toy,2
+What is PKI?,KeySys,Game,Movie,Book,1
+What is CA?,Place,CertAuth,Game,Toy,2
+What is Blockchain?,Cube,ChainData,Game,Toy,2
+What is Bitcoin?,Coin,Crypto,Game,Toy,2
+What is Dark Web?,Night,HiddenNet,Game,Toy,2
+What is Tor?,God,AnonBrowser,Game,Toy,2
+What is Proxy?,StandIn,Relay,Game,Toy,2
+What is Reverse Proxy?,Back,ServerRelay,Game,Toy,2
+What is DMZ?,Zone,NetArea,Game,Toy,2
+What is LAN?,LocalNet,Game,Movie,Book,1
+What is WAN?,WideNet,Game,Movie,Book,1
+What is WLAN?,WiFi,Game,Movie,Book,1
+What is VLAN?,VirtualNet,Game,Movie,Book,1
+What is NAT?,Bug,IPTrans,Game,Toy,2
+What is DHCP?,AutoIP,Game,Movie,Book,1
+What is DNS?,NameSys,Game,Movie,Book,1
+What is TCP?,Proto,ReliableNet,Game,Toy,2
+What is UDP?,Proto,FastNet,Game,Toy,2
+What is OSI Model?,Layers,NetModel,Game,Toy,2
+What is IoT?,SmartDev,Game,Movie,Book,1

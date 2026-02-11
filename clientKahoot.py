@@ -98,6 +98,24 @@ class KahootClient:
                 self._send_line(command)
             return
 
+        if "how many questions would you like?" in lowered:
+            num_q = input().strip()
+            if num_q.isdigit() and int(num_q) > 0:
+                self._send_line(num_q)
+                return
+        
+        if "select a theme" in lowered and ("general" in lowered or "math" in lowered or "cyber" in lowered or "nature" in lowered):
+            theme = input().strip()
+            if theme:
+                self._send_line(theme)
+            return
+        
+        if "invalid theme" in lowered:
+            theme = input().strip()
+            if theme:
+                self._send_line(theme)
+            return
+            
         if "type 1-4" in lowered or "type 1, 2, 3, or 4" in lowered:
             answer = input().strip()
             if answer:
@@ -118,6 +136,15 @@ class KahootClient:
             answer = input().strip()
             if answer:
                 self._send_line(answer)
+
+        if lowered.strip() == "":
+            print("Type 1, 2, 3, or 4 and press Enter.")
+            answer = input().strip()
+            if answer:
+                self._send_line(answer)
+
+        
+
 
     def _send_line(self, line):
         # Always send a single line with newline therminator.

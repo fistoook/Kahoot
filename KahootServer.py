@@ -15,7 +15,6 @@ from KahootPlayer import Player
 from KahootRoom import Room
 from NetworkHelpers import NetworkHelpers
 
-
 init(autoreset=True)
 CLIENT_DISCONNECTED = "CLIENT_DISCONNECTED"
 CLIENT_RESPONSE_TIMEOUT = 60
@@ -26,7 +25,8 @@ STATE_IN_LOBBY = "in_lobby"
 STATE_HOSTING = "hosting"
 STATE_IN_ROOM = "in_room"
 STATE_IN_GAME = "in_game"
-
+STATE_AWAITING_QUESTION_COUNT = "awaiting_question_count"
+STATE_AWAITING_THEME = "awaiting_theme"
 
 def _log_info(message):
     """Log an information message in cyan."""
@@ -56,6 +56,9 @@ class KahootServer:
         self.client_state = {}  # Maps socket -> state
         self.client_data = {}   # Maps socket -> dict with tracking data
         self.socket_to_player = {}  # Maps socket -> Player object
+        
+        # Active games tracking for concurrent game support
+        self.active_games = {}  # Maps room_id -> game state dict
 
     def Run(self):
         """Main server loop: Non-blocking concurrent handling of multiple clients."""
@@ -66,7 +69,7 @@ class KahootServer:
         while True:
             # Monitor server socket + all active client sockets
             readable_sockets = [self.server_socket] + list(self.client_state.keys())
-            readable, _, _ = select.select(readable_sockets, [], [], 1)
+            readable, _, _ = select.select(readable_sockets, [], [], 0.1)  # 100ms timeout
 
             # Handle new connections
             if self.server_socket in readable:
@@ -107,9 +110,16 @@ class KahootServer:
             self._handle_lobby_command(sock, text)
         elif state == STATE_HOSTING:
             self._handle_host_command(sock, text)
+        elif state == STATE_AWAITING_QUESTION_COUNT:
+            self._handle_question_count(sock, text)
+        elif state == STATE_AWAITING_THEME:
+            self._handle_theme_selection(sock, text)
         elif state == STATE_IN_ROOM:
             # Player waiting for game to start, ignore input
             pass
+        elif state == STATE_IN_GAME:
+            # Player in active game, handle answer
+            self._handle_game_answer(sock, text)
 
     def _handle_username(self, sock, username):
         """Process username submission and add player to lobby."""
@@ -184,6 +194,66 @@ class KahootServer:
         else:
             sock.sendall(b"Invalid command. Type 'Host <name>' or 'Join <ID>'.\n")
 
+    def _handle_question_count(self, sock, text):
+        """Process the number of questions from host."""
+        player = self.socket_to_player.get(sock)
+        if not player:
+            return
+
+        room = self.client_data.get(sock, {}).get("room")
+        if not room:
+            return
+
+        # Validate the input is a positive integer
+        if not text.isdigit() or int(text) <= 0:
+            sock.sendall(b"Invalid number. Please enter a positive integer: ")
+            return
+
+        question_count = int(text)
+        _log_info(f"Room {room.room_id} will have {question_count} questions")
+        
+        # Store question count in room data
+        room.question_count = question_count
+        
+        # Transition to theme selection
+        self.client_state[sock] = STATE_AWAITING_THEME
+        sock.sendall(b"Select a theme (general, math, cyber, nature):\n")
+
+    def _handle_theme_selection(self, sock, text):
+        """Process theme selection from host."""
+        player = self.socket_to_player.get(sock)
+        if not player:
+            return
+
+        room = self.client_data.get(sock, {}).get("room")
+        if not room:
+            return
+
+        # Validate theme selection
+        valid_themes = ["general", "math", "cyber", "nature"]
+        theme = text.lower().strip()
+        
+        if theme not in valid_themes:
+            sock.sendall(b"Invalid theme. Please choose: general, math, cyber, or nature:\n")
+            return
+
+        _log_info(f"Room {room.room_id} selected theme: {theme}")
+        
+        # Store theme in room data
+        room.theme = theme
+        room.game_started = True
+        
+        # Notify all players game is starting
+        self.network_helper._broadcast_room(room, f"Game starting with {theme} theme!\n")
+        
+        # Mark all players (including host) as in-game
+        self.client_state[sock] = STATE_IN_GAME
+        for p in room.players:
+            self.client_state[p.conn] = STATE_IN_GAME
+        
+        # Start the game with the specified number of questions and theme
+        self.game_control.run_room_game(room, room.question_count)
+        
     def _handle_host_command(self, sock, text):
         """Process START, LIST, CLOSE commands from host."""
         player = self.socket_to_player.get(sock)
@@ -198,13 +268,10 @@ class KahootServer:
         text_lower = text.lower()
 
         if text_lower == "start":
-            room.game_started = True
-            _log_info(f"Game started in room {room.room_id}")
-            self.network_helper._broadcast_room(room, "Game starting now!\n")
-            # Mark players as in-game
-            for p in room.players:
-                self.client_state[p.conn] = STATE_IN_GAME
-            self.game_control.run_room_game(room)
+            _log_info(f"Host initiating game start for room {room.room_id}")
+            # Transition to awaiting question count state
+            self.client_state[sock] = STATE_AWAITING_QUESTION_COUNT
+            sock.sendall(b"How many questions would you like?\n")
 
         elif text_lower == "list":
             players_str = ", ".join([p.username for p in room.players])
@@ -231,6 +298,14 @@ class KahootServer:
             msg = f"Room {room_id} - Host: {room.host_client.username}, Players: {len(room.players)}\n"
             try:
                 conn.sendall(msg.encode())
+            except:
+                pass
+
+    def _broadcast_room(self, room, message):
+        """Send message to all players in a room."""
+        for player in list(room.players):
+            try:
+                player.conn.sendall(message.encode())
             except:
                 pass
 
@@ -270,6 +345,14 @@ class KahootServer:
     def clear_client_screens(self):
         """Clear screens for all clients."""
         self.broadcast("\033[H\033[2J")
+
+    def _handle_game_answer(self, sock, text):
+        """
+        Handle game answers during active game.
+        Note: Currently unused as GameManager.run_room_game handles answers
+        directly with its own select() loop while blocking.
+        """
+        pass
 
 
 if __name__ == "__main__":
