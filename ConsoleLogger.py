@@ -151,6 +151,15 @@ class ConsoleLogger:
         print(f"{Fore.BLUE}{Style.BRIGHT}[QUESTION]{Style.RESET_ALL} {question_text}")
 
     @staticmethod
+    def option(option_text, option_number):
+        """Display a question option with green [OPTION N] prefix."""
+        print(f"{Fore.GREEN}{Style.BRIGHT}[OPTION {option_number}]{Style.RESET_ALL} {option_text}")
+
+    @staticmethod
+    def question_counter(counter):
+        """Display a question counter in cyan."""
+        print(f"{Fore.CYAN}{Style.BRIGHT}[Count {counter}]{Style.RESET_ALL}")
+    @staticmethod
     def rooms_panel(room_lines):
         """Display a gorgeously styled rooms panel in the client console."""
         # Create fancy border with box drawing characters

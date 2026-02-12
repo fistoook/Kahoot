@@ -136,9 +136,11 @@ class KahootClient:
                 return True
                 
             if "type 1-4" in lowered or "type 1, 2, 3, or 4" in lowered:
-                for line in lines:
-                    if line.strip():
-                        ConsoleLogger.question(line.strip())
+                ConsoleLogger.question_counter(lines[0].strip())
+                ConsoleLogger.question(lines[1].strip())
+                for i in range(2, 6):
+                    ConsoleLogger.option(lines[i].strip(), i)
+                ConsoleLogger.prompt(lowered)
                 answer = input().strip()
                 if answer:
                     self._send_line(answer)
