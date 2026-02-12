@@ -8,25 +8,20 @@
 import socket
 import select
 import time
-import json
 from ConsoleLogger import ConsoleLogger
 from GameManager import GameManager
-from KahootPlayer import Player
-from KahootRoom import Room
 from NetworkHelpers import NetworkHelpers
+from KahootStateMachine import (
+    KahootStateMachine,
+    STATE_AWAITING_USERNAME,
+    STATE_IN_LOBBY,
+)
 
 
 CLIENT_DISCONNECTED = "CLIENT_DISCONNECTED"
 CLIENT_RESPONSE_TIMEOUT = 60
+WELCOME_MESSAGE = "\n\033[1;35m╔══════════════════════════════════════╗\n║     WELCOME TO KAHOOT!               ║\n║                                      ║\n║   Get ready for an epic quiz!        ║\n╚══════════════════════════════════════╝\033[0m\n\n"
 
-# Client states for state machine
-STATE_AWAITING_USERNAME = "awaiting_username"
-STATE_IN_LOBBY = "in_lobby"
-STATE_HOSTING = "hosting"
-STATE_IN_ROOM = "in_room"
-STATE_IN_GAME = "in_game"
-STATE_AWAITING_QUESTION_COUNT = "awaiting_question_count"
-STATE_AWAITING_THEME = "awaiting_theme"
 class KahootServer:
     def __init__(self, host='127.0.0.1', port=5555):
         """Initialize Kahoot server with state machine for concurrent client handling."""
@@ -46,10 +41,20 @@ class KahootServer:
         # Active games tracking for concurrent game support
         self.active_games = {}  # Maps room_id -> game state dict
 
+        # State machine handler
+        self.state_machine = KahootStateMachine(
+            self.clients,
+            self.client_state,
+            self.client_data,
+            self.socket_to_player,
+            self.game_control,
+            self.network_helper,
+        )
+
     def Run(self):
         """Main server loop: Non-blocking concurrent handling of multiple clients."""
         self.server_socket.listen(self.num_players)
-        ConsoleLogger.success(f"Server started on {self.server_address}. Accepting connections...")
+        ConsoleLogger.init_server_console(self.server_address)
 
         # Main event loop
         while True:
@@ -61,16 +66,14 @@ class KahootServer:
             if self.server_socket in readable:
                 try:
                     conn, addr = self.server_socket.accept()
-                    ConsoleLogger.server_event(f"New connection from {addr}")
+                    # Connection accepted; header will reflect counts
                     
-                    # Log and send welcome message
-                    ConsoleLogger.welcome()
-                    welcome_msg = "\n\033[1;35m╔══════════════════════════════════════╗\n║     WELCOME TO KAHOOT!               ║\n║                                      ║\n║   Get ready for an epic quiz!        ║\n╚══════════════════════════════════════╝\033[0m\n\n"
-                    conn.sendall(welcome_msg.encode())
+                    # Send welcome message to client only
+                    self.network_helper.send_text(conn, WELCOME_MESSAGE)
                     
                     self.client_state[conn] = STATE_AWAITING_USERNAME
                     self.client_data[conn] = {"deadline": time.time() + CLIENT_RESPONSE_TIMEOUT}
-                    conn.sendall(b"Enter your username: ")
+                    self.network_helper.send_text(conn, "Enter your username: ")
                 except OSError:
                     pass
 
@@ -82,6 +85,13 @@ class KahootServer:
             
             # Update all active games (non-blocking) - server checks timeouts, GameManager updates state
             self._update_active_games()
+
+            # Update header when counts change
+            ConsoleLogger.update_server_header(
+                len(self.clients),
+                len(self.client_state),
+                len(self.game_control.rooms),
+            )
 
     def _handle_client_message(self, sock):
         """Process incoming data from a client based on its current state."""
@@ -96,226 +106,7 @@ class KahootServer:
             return
 
         text = data.decode(errors="ignore").strip()
-        state = self.client_state.get(sock)
-
-        # Route to appropriate handler based on state
-        if state == STATE_AWAITING_USERNAME:
-            self._handle_username(sock, text)
-        elif state == STATE_IN_LOBBY:
-            self._handle_lobby_command(sock, text)
-        elif state == STATE_HOSTING:
-            self._handle_host_command(sock, text)
-        elif state == STATE_AWAITING_QUESTION_COUNT:
-            self._handle_question_count(sock, text)
-        elif state == STATE_AWAITING_THEME:
-            self._handle_theme_selection(sock, text)
-        elif state == STATE_IN_ROOM:
-            # Player waiting for game to start, ignore input
-            pass
-        elif state == STATE_IN_GAME:
-            # Player in active game, handle answer
-            self._handle_game_answer(sock, text)
-
-    def _handle_username(self, sock, username):
-        """Process username submission and add player to lobby."""
-        if not username:
-            username = "Player"
-
-        # Create Player and add to lobby
-        player = Player(sock, username)
-        self.clients.append(player)
-        self.socket_to_player[sock] = player
-        self.client_state[sock] = STATE_IN_LOBBY
-
-        ConsoleLogger.player_action(username, "Joined from " + str(sock.getpeername()))
-
-        # Send lobby welcome
-        sock.sendall(b"Successfully joined our server!\n")
-        sock.sendall(b"Here are all of the ongoing games:\n")
-        self.send_room_list(sock)
-        sock.sendall(b"Type 'Host <game name>' to host or 'Join <room ID>' to join.\n")
-
-    def _handle_lobby_command(self, sock, text):
-        """Process Host/Join commands from lobby."""
-        player = self.socket_to_player.get(sock)
-        if not player:
-            return
-
-        # Host command
-        if text.lower().startswith("host "):
-            game_name = text[5:].strip()
-            if not game_name:
-                sock.sendall(b"Game name cannot be empty. Please try again.\n")
-                return
-
-            # Create new room
-            room_id = str(len(self.game_control.rooms) + 1).zfill(4)
-            room = Room(room_id, player)
-            self.game_control.rooms[room_id] = room
-            self.client_state[sock] = STATE_HOSTING
-            self.client_data[sock]["room"] = room
-
-            ConsoleLogger.room_event(room_id, f"Created by {player.username}")
-            sock.sendall(f"Game '{game_name}' hosted! Room ID: {room_id}\n".encode())
-            sock.sendall(b"Type START to begin, LIST to show players, or CLOSE to cancel.\n")
-
-        # Join command
-        elif text.lower().startswith("join "):
-            room_id = text[5:].strip()
-            if room_id not in self.game_control.rooms:
-                sock.sendall(b"Invalid room ID. Try again.\n")
-                return
-
-            room = self.game_control.rooms[room_id]
-            if room.game_started:
-                sock.sendall(b"Game already started. Try another room.\n")
-                return
-
-            # Add to room
-            room.players.append(player)
-            room.scores[player] = 0
-            self.client_state[sock] = STATE_IN_ROOM
-            self.client_data[sock]["room"] = room
-
-            ConsoleLogger.room_event(room_id, f"{player.username} joined")
-            sock.sendall(f"Joined '{room.host_client.username}' room! Waiting to start...\n".encode())
-
-            # Notify host
-            try:
-                room.host_client.conn.sendall(f"{player.username} joined!\n".encode())
-            except:
-                pass
-
-        else:
-            sock.sendall(b"Invalid command. Type 'Host <name>' or 'Join <ID>'.\n")
-
-    def _handle_question_count(self, sock, text):
-        """Process the number of questions from host."""
-        player = self.socket_to_player.get(sock)
-        if not player:
-            return
-
-        room = self.client_data.get(sock, {}).get("room")
-        if not room:
-            return
-
-        # Validate the input is a positive integer
-        if not text.isdigit() or int(text) <= 0:
-            sock.sendall(b"Invalid number. Please enter a positive integer: ")
-            return
-
-        question_count = int(text)
-        ConsoleLogger.room_event(room.room_id, f"Set to {question_count} questions")
-        
-        # Store question count in room data
-        room.question_count = question_count
-        
-        # Transition to theme selection
-        self.client_state[sock] = STATE_AWAITING_THEME
-        sock.sendall(b"Select a theme (general, math, cyber, nature):\n")
-
-    def _handle_theme_selection(self, sock, text):
-        """Process theme selection from host."""
-        player = self.socket_to_player.get(sock)
-        if not player:
-            return
-
-        room = self.client_data.get(sock, {}).get("room")
-        if not room:
-            return
-
-        # Validate theme selection
-        valid_themes = ["general", "math", "cyber", "nature"]
-        theme = text.lower().strip()
-        
-        if theme not in valid_themes:
-            sock.sendall(b"Invalid theme. Please choose: general, math, cyber, or nature:\n")
-            return
-
-        ConsoleLogger.room_event(room.room_id, f"Theme selected: {theme}")
-        
-        # Store theme in room data
-        room.theme = theme
-        room.game_started = True
-        
-        # Notify all players game is starting
-        self.network_helper._broadcast_room(room, f"Game starting with {theme} theme!\n")
-        
-        # Mark all players (including host) as in-game
-        self.client_state[sock] = STATE_IN_GAME
-        for p in room.players:
-            self.client_state[p.conn] = STATE_IN_GAME
-        
-        # Start the game with the specified number of questions and theme (non-blocking)
-        # GameManager handles all game logic with state machine
-        self.game_control.init_game(room, room.question_count, theme)
-        # Send first question
-        self.game_control.send_next_question(room.room_id)
-        
-    def _handle_host_command(self, sock, text):
-        """Process START, LIST, CLOSE commands from host."""
-        player = self.socket_to_player.get(sock)
-        if not player:
-            return
-
-        # Find host's room
-        room = self.client_data.get(sock, {}).get("room")
-        if not room:
-            return
-
-        text_lower = text.lower()
-
-        if text_lower == "start":
-            ConsoleLogger.room_event(room.room_id, "Host initiated game start")
-            # Transition to awaiting question count state
-            self.client_state[sock] = STATE_AWAITING_QUESTION_COUNT
-            sock.sendall(b"How many questions would you like?\n")
-
-        elif text_lower == "list":
-            players_str = ", ".join([p.username for p in room.players])
-            if not players_str:
-                players_str = "No players yet"
-            sock.sendall(f"Players: {players_str}\n".encode())
-
-        elif text_lower == "close":
-            ConsoleLogger.room_event(room.room_id, "Closed by host")
-            self._broadcast_room(room, "Room closed.\n")
-            self._close_room(room)
-            self.client_state[sock] = STATE_IN_LOBBY
-
-        else:
-            sock.sendall(b"Invalid command. Type START, LIST, or CLOSE.\n")
-
-    def send_room_list(self, conn):
-        """Send list of active rooms to a client."""
-        if not self.game_control.rooms:
-            conn.sendall(b"No active games.\n")
-            return
-
-        for room_id, room in self.game_control.rooms.items():
-            msg = f"Room {room_id} - Host: {room.host_client.username}, Players: {len(room.players)}\n"
-            try:
-                conn.sendall(msg.encode())
-            except:
-                pass
-
-    def _broadcast_room(self, room, message):
-        """Send message to all players in a room."""
-        for player in list(room.players):
-            try:
-                player.conn.sendall(message.encode())
-            except:
-                pass
-
-    def _close_room(self, room):
-        """Close a room and return players to lobby."""
-        if room.room_id not in self.game_control.rooms:
-            return
-
-        for player in list(room.players):
-            self.client_state[player.conn] = STATE_IN_LOBBY
-
-        del self.game_control.rooms[room.room_id]
+        self.state_machine.handle_message(sock, text)
 
     def _drop_client(self, sock):
         """Remove a client and clean up state."""
@@ -332,54 +123,6 @@ class KahootServer:
         except:
             pass
 
-    def broadcast(self, message):
-        """Broadcast to all clients in lobby."""
-        for client in self.clients:
-            try:
-                client.conn.sendall(message.encode())
-            except:
-                pass
-
-    def clear_client_screens(self):
-        """Clear screens for all clients."""
-        self.broadcast("\033[H\033[2J")
-
-    def _handle_game_answer(self, sock, text):
-        """
-        Handle game answers from players.
-        GameManager processes the answer and updates scores.
-        """
-        # Find which room this player is in
-        player = self.socket_to_player.get(sock)
-        if not player:
-            return
-        
-        room = self.client_data.get(sock, {}).get("room")
-        if not room or room.room_id not in self.game_control.active_games:
-            return
-        
-        # Let GameManager process the answer
-        answer_valid = self.game_control.process_answer(room.room_id, sock, text)
-        
-        if answer_valid:
-            game_state = self.game_control.active_games[room.room_id]
-            correct_answer = game_state['correct_answer']
-            if text.strip() == correct_answer:
-                try:
-                    sock.sendall(b"Correct!\n")
-                except:
-                    pass
-            else:
-                try:
-                    sock.sendall(b"Wrong!\n")
-                except:
-                    pass
-        else:
-            try:
-                sock.sendall(b"Invalid answer. Type 1, 2, 3, or 4 and press Enter.\n")
-            except:
-                pass
-    
     def _update_active_games(self):
         """
         Update all active games each loop iteration.
@@ -401,9 +144,4 @@ class KahootServer:
                 for player in list(room.players):
                     self.client_state[player.conn] = STATE_IN_LOBBY
                 # Close room
-                self._close_room(room)
-
-
-if __name__ == "__main__":
-    server = KahootServer()
-    server.Run()
+                self.state_machine.close_room(room)

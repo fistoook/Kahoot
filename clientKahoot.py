@@ -7,6 +7,7 @@ class KahootClient:
         self.client_socket = socket.socket()
         self.is_running = False
         self.name_sent = False
+        self.recv_buffer = ""
 
     def connect(self):
         try:
@@ -46,6 +47,19 @@ class KahootClient:
             return
 
         text = data.decode(errors="ignore")
+        self.recv_buffer += text
+
+        text = self.recv_buffer
+        self.recv_buffer = ""
+        lowered = text.lower()
+
+         
+        if "enter your username" in lowered and "welcome to kahoot" in lowered:
+            prompt_index = lowered.find("enter your username")
+            banner = text[:prompt_index].rstrip()
+            if banner:
+                print(banner, end="\n", flush=True)
+
         handled = self._handle_prompts(text)
         
         # Check if it's a question message
@@ -63,91 +77,105 @@ class KahootClient:
 
     def _handle_prompts(self, text):
         """Handle server prompts and return True if a prompt was handled."""
-        lowered = text.lower()
-
-        if not self.name_sent and "enter your username" in lowered:
-            ConsoleLogger.prompt("Enter your username:")
-            name = input().strip()
-            if not name:
-                name = "Player"
-            self._send_line(name)
-            self.name_sent = True
-            return True
-
-        if "successfully" in lowered:
-            ConsoleLogger.success(lowered)
-            return True
-        
-        if "join <room id>" in lowered or "host <game name>" in lowered:
-            ConsoleLogger.ongoing(lowered)
-            command = input().strip()
-            if command:
-                self._send_line(command)
-            return True
-
-        if "invalid command" in lowered or "invalid room id" in lowered or "game name cannot be empty" in lowered or "invalid host command" in lowered:
-            ConsoleLogger.prompt(lowered)
-            command = input().strip()
-            if command:
-                self._send_line(command)
-            return True
-
-        if "type start" in lowered and "list" in lowered and "close" in lowered:
-            ConsoleLogger.prompt(lowered)
-            command = input().strip()
-            if command:
-                self._send_line(command)
-            return True
-
-        if "how many questions would you like?" in lowered:
-            ConsoleLogger.prompt(lowered)
-            num_q = input().strip()
-            if num_q.isdigit() and int(num_q) > 0:
-                self._send_line(num_q)
+        lines = text.lower().split('\n')
+        for lowered in lines:
+            lowered = lowered.strip()
+            if not self.name_sent and "enter your username" in lowered:
+                ConsoleLogger.prompt("Enter your username:")
+                name = input().strip()
+                if not name:
+                    name = "Player"
+                self._send_line(name)
+                self.name_sent = True
                 return True
-        
-        if "select a theme" in lowered and ("general" in lowered or "math" in lowered or "cyber" in lowered or "nature" in lowered):
-            ConsoleLogger.prompt(lowered)
-            theme = input().strip()
-            if theme:
-                self._send_line(theme)
-            return True
-        
-        if "invalid theme" in lowered:
-            ConsoleLogger.prompt(lowered)
-            theme = input().strip()
-            if theme:
-                self._send_line(theme)
-            return True
-            
-        if "type 1-4" in lowered or "type 1, 2, 3, or 4" in lowered:
-            ConsoleLogger.prompt(lowered)
-            answer = input().strip()
-            if answer:
-                self._send_line(answer)
-            return True
-        
-        if "players:" in lowered:
-            ConsoleLogger.prompt(lowered)
-            command = input().strip()
-            if command:
-                self._send_line(command)
-            return True
-        
-        if "room closed" in lowered:
-            ConsoleLogger.prompt(lowered)
-            command = input().strip()
-            if command:
-                self._send_line(command)
-            return True
 
-        if "Invalid answer" in lowered:
-            ConsoleLogger.prompt(lowered)
-            answer = input().strip()
-            if answer:
-                self._send_line(answer)
-            return True
-        
+            if "successfully" in lowered:
+                ConsoleLogger.success(lowered)
+                return True
+            
+            if "join <room id>" in lowered or "host <game name>" in lowered:
+                ConsoleLogger.prompt(lowered)
+                command = input().strip()
+                if command:
+                    self._send_line(command)
+                return True
+
+            if "invalid command" in lowered or "invalid room id" in lowered or "game name cannot be empty" in lowered or "invalid host command" in lowered:
+                ConsoleLogger.prompt(lowered)
+                command = input().strip()
+                if command:
+                    self._send_line(command)
+                return True
+
+            if "type start" in lowered and "list" in lowered and "close" in lowered:
+                ConsoleLogger.prompt(lowered)
+                command = input().strip()
+                if command:
+                    self._send_line(command)
+                return True
+
+            if "how many questions would you like?" in lowered:
+                ConsoleLogger.prompt(lowered)
+                num_q = input().strip()
+                if num_q.isdigit() and int(num_q) > 0:
+                    self._send_line(num_q)
+                    return True
+            
+            if "select a theme" in lowered and ("general" in lowered or "math" in lowered or "cyber" in lowered or "nature" in lowered):
+                ConsoleLogger.prompt(lowered)
+                theme = input().strip()
+                if theme:
+                    self._send_line(theme)
+                return True
+            
+            if "invalid theme" in lowered:
+                ConsoleLogger.prompt(lowered)
+                theme = input().strip()
+                if theme:
+                    self._send_line(theme)
+                return True
+                
+            if "type 1-4" in lowered or "type 1, 2, 3, or 4" in lowered:
+                for line in lines:
+                    if line.strip():
+                        ConsoleLogger.question(line.strip())
+                answer = input().strip()
+                if answer:
+                    self._send_line(answer)
+                return True
+            
+            if "players:" in lowered:
+                ConsoleLogger.info(lowered)
+                command = input().strip()
+                if command:
+                    self._send_line(command)
+                return True
+            
+            if "room closed" in lowered:
+                ConsoleLogger.info(lowered)
+                command = input().strip()
+                if command:
+                    self._send_line(command)
+                return True
+
+            if "Invalid answer" in lowered:
+                ConsoleLogger.error(lowered)
+                answer = input().strip()
+                if answer:
+                    self._send_line(answer)
+                return True
+            
+            if "game" in lowered and "hosted" in lowered:
+                ConsoleLogger.success(lowered)
+
+            if "available rooms" in lowered:
+                ConsoleLogger.info(lowered)
+                ConsoleLogger.prompt("Type 'Host <game name>' to host, 'Join <room ID>' to join, or 'View Rooms' to see available rooms:")
+                answer = input().strip()
+                if answer:
+                    self._send_line(answer)
+                return True
+
         return False
 
     def _send_line(self, line):

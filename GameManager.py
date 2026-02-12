@@ -69,13 +69,13 @@ class GameManager:
         room = game_state['room']
         
         # Clear screens
-        self.clear_room_screens(room)
+        self.network_helper.clear_room_screens(room)
         
         prompt = self.get_current_question(room_id)
         if prompt is None:
             return False  # Game is over
         
-        self.network_helper._broadcast_room(room, prompt)
+        self.network_helper.broadcast_room(room, prompt)
         
         # Reset state for this question
         game_state['question_start_time'] = time.time()
@@ -191,7 +191,7 @@ class GameManager:
             summary += f"⏱ No answer: {no_answer_count} players\n"
         summary += "\nMoving to next question...\n"
         
-        self.network_helper._broadcast_room(room, summary)
+        self.network_helper.broadcast_room(room, summary)
         
         # Schedule next question after 3.5 seconds
         game_state['show_results_until'] = time.time() + 3.5
@@ -207,7 +207,7 @@ class GameManager:
         room = game_state['room']
         
         # Clear screens
-        self.clear_room_screens(room)
+        self.network_helper.clear_room_screens(room)
         
         # Show leaderboard
         sorted_results = sorted(room.scores.items(), key=lambda x: x[1], reverse=True)
@@ -224,7 +224,7 @@ class GameManager:
             msg += f"{i:2d}. {player.username:<20s} {score:>5d} pts\n"
         msg += "="*50 + "\nThanks for playing!\n"
         
-        self.network_helper._broadcast_room(room, msg)
+        self.network_helper.broadcast_room(room, msg)
         
         # Clean up
         del self.active_games[room_id]
@@ -260,7 +260,7 @@ class GameManager:
                 f"4) {o4}\n\n"
                 f"You have {self.timeout} seconds. Type 1-4 and press Enter:\n"
             )
-            self.network_helper._broadcast_room(room, prompt)
+            self.network_helper.broadcast_room(room, prompt)
 
             # Collect answers from room players
             answered_this_round = set()
@@ -299,10 +299,7 @@ class GameManager:
                         
 
                     if answer is None:
-                        try:
-                            self.network_helper.send_line(s, "Invalid answer. Type 1, 2, 3, or 4 and press Enter.")
-                        except (ConnectionError, OSError):
-                            self._drop_client(s)
+                        self.network_helper.send_line(s, "Invalid answer. Type 1, 2, 3, or 4 and press Enter.")
                         continue
 
                     # Record answer and update room score if correct
@@ -310,15 +307,9 @@ class GameManager:
                     player = conn_to_player.get(s)
                     if player is not None and answer == correct:
                         room.scores[player] = room.scores.get(player, 0) + 1
-                        try:
-                            self.network_helper.send_line(s, " Correct!")
-                        except (ConnectionError, OSError):
-                            self._drop_client(s)
+                        self.network_helper.send_line(s, "Correct!")
                     else:
-                        try:
-                            self.network_helper.send_line(s, " Wrong!")
-                        except (ConnectionError, OSError):
-                            self._drop_client(s)
+                        self.network_helper.send_line(s, "Wrong!")
                     answered_this_round.add(s)
 
             # Tally results for the room
@@ -343,19 +334,15 @@ class GameManager:
             if no_answer_players:
                 summary += f" No answer: {no_answer_players} players\n"
 
-            self.network_helper._broadcast_room(room, summary)
-            self.network_helper._broadcast_room(room, "Moving to next question...\n")
+            self.network_helper.broadcast_room(room, summary)
+            self.network_helper.broadcast_room(room, "Moving to next question...\n")
             time.sleep(3.5)  # Pause before next question
 
         # Display room-specific leaderboard when game ends
         self.show_room_leaderboard(room)
 
     def clear_room_screens(self, room):
-        for p in room.players:
-            try:
-                self.network_helper.send_line(p.conn, "\033[2J\033[H")  # Clear screen ANSI code
-            except (ConnectionError, OSError):
-                self._drop_client(p.conn)
+        self.network_helper.clear_room_screens(room)
 
     def _load_questions(self, filename=None, num_questions=None, theme=None):
         if num_questions is None:
@@ -395,43 +382,9 @@ class GameManager:
 
             return random.sample(all_questions, min(len(all_questions), num_questions))
 
-    def show_leaderboard(self):
-        """Display the global game leaderboard and close the server."""
-        self.clear_client_screens()
-        sorted_results = sorted(self.scores.items(), key=lambda item: item[1], reverse=True)
-        leaderboard_msg = "\n--- FINAL LEADERBOARD ---\n"
-        rankings = {}  # Group players by score
-        for sock, score in sorted_results:
-            name = self.names.get(sock, "Unknown")
-
-            if score not in rankings:
-                rankings[score] = []
-
-            rankings[score].append(name)
-
-        # Format leaderboard with ranking
-        place = 1
-        for score in sorted(rankings.keys(), reverse=True):
-            players = ", ".join(rankings[score])
-            leaderboard_msg += f"{place}. {players} with {score} points\n"
-            place += len(rankings[score])
-
-        self.broadcast(leaderboard_msg + "\nThanks for playing!")
-
-        # Close all client connections
-        for c in list(self.clients):
-            try:
-                c.conn.close()
-            except:
-                pass
-        try:
-            self.server_socket.close()
-        except:
-            pass
-
     def show_room_leaderboard(self, room):
         """Display the leaderboard for a specific room and clean up."""
-        self.clear_room_screens(room)
+        self.network_helper.clear_room_screens(room)
         sorted_results = sorted(room.scores.items(), key=lambda item: item[1], reverse=True)
         leaderboard_msg = "\n--- FINAL LEADERBOARD ---\n"
         rankings = {}  # Group players by score
@@ -450,4 +403,4 @@ class GameManager:
             leaderboard_msg += f"{place}. {players} with {score} points\n"
             place += len(rankings[score])
 
-        self.network_helper._broadcast_room(room, leaderboard_msg + "\nThanks for playing!\n")
+        self.network_helper.broadcast_room(room, leaderboard_msg + "\nThanks for playing!\n")
