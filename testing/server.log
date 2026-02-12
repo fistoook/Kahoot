@@ -1,0 +1,24 @@
+[INFO] Server started on ('127.0.0.1', 5555). Accepting connections...
+[INFO] New connection from ('127.0.0.1', 53354)
+[INFO] Player 'P1' joined from ('127.0.0.1', 53354)
+[INFO] Player 'P1' created room 0001
+[INFO] New connection from ('127.0.0.1', 53355)
+[INFO] Player 'P2' joined from ('127.0.0.1', 53355)
+[INFO] Host initiating game start for room 0001
+[INFO] Player 'P2' created room 0002
+[INFO] Room 0001 will have 1 questions
+[INFO] Host initiating game start for room 0002
+[INFO] Room 0001 selected theme: general
+[WARN] Game initialized for room 0001 with 1 questions
+[WARN] Sent question 1 to room 0001
+[INFO] Room 0002 will have 1 questions
+[WARN] Player P1 answered correctly
+[WARN] Showed results for room 0001
+[INFO] Room 0002 selected theme: general
+[WARN] Game initialized for room 0002 with 1 questions
+[WARN] Sent question 1 to room 0002
+[WARN] Showed results for room 0002
+[WARN] Ended game for room 0001
+[WARN] Ended game for room 0002
+[INFO] Player 'P1' disconnected
+[INFO] Player 'P2' disconnected
