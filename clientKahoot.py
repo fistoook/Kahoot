@@ -1,15 +1,27 @@
 ﻿import socket
+import time
 from ConsoleLogger import ConsoleLogger
+from KahootClientParser import KahootClientMessageParser
+from NetworkHelpers import NetworkHelpers
 
 class KahootClient:
     def __init__(self, host='127.0.0.1', port=5555):
+        """Initialize connection settings, socket, and helpers."""
         self.server_address = (host, port)
         self.client_socket = socket.socket()
+        self.client_socket.settimeout(0.5)  # 0.5 second timeout for non-blocking loop
         self.is_running = False
-        self.name_sent = False
-        self.recv_buffer = ""
+        # Helpers for network sends and server message parsing.
+        self.network_helper = NetworkHelpers()
+        self.message_parser = KahootClientMessageParser(self)
+        # Countdown timer state.
+        self.countdown_end_time = None
+        self.displaying_countdown = False
+        self.last_countdown_display = 0
+        self.countdown_duration = 20
 
     def connect(self):
+        """Connect to the server and mark the client as running."""
         try:
             self.client_socket.connect(self.server_address)
             ConsoleLogger.connected(f"Connected to Kahoot server at {self.server_address[0]}:{self.server_address[1]}")
@@ -23,11 +35,16 @@ class KahootClient:
             return False
 
     def start(self):
+        """Start the receive loop and run until exit."""
+        # Main loop: connect once and then receive messages until stopped.
         if not self.is_running:
             if not self.connect():
                 return
         try:
             while self.is_running:
+                # Display countdown if active.
+                if self.displaying_countdown:
+                    self._update_countdown_display()
                 self._receive_messages()
         except KeyboardInterrupt:
             ConsoleLogger.warn("Player exited the game.")
@@ -35,9 +52,15 @@ class KahootClient:
             self.close()
 
     def _receive_messages(self):
+        """Read one server payload and forward it to the parser."""
+        # Receive raw bytes from the server (socket timeout is 0.5s).
         try:
             data = self.client_socket.recv(4096)
-        except Exception:
+        except socket.timeout:
+            # Timeout is normal; just loop again to display countdown.
+            return
+        except Exception as e:
+            ConsoleLogger.error(f"Socket error: {e}")
             self.is_running = False
             return
 
@@ -45,150 +68,47 @@ class KahootClient:
             ConsoleLogger.disconnected("Connection closed by server.")
             self.is_running = False
             return
-
-        text = data.decode(errors="ignore")
-        self.recv_buffer += text
-
-        text = self.recv_buffer
-        self.recv_buffer = ""
-        lowered = text.lower()
-
-         
-        if "enter your username" in lowered and "welcome to kahoot" in lowered:
-            prompt_index = lowered.find("enter your username")
-            banner = text[:prompt_index].rstrip()
-            if banner:
-                print(banner, end="\n", flush=True)
-
-        handled = self._handle_prompts(text)
         
-        # Check if it's a question message
-        if not handled and "Question" in text:
-            # Extract and display question using ConsoleLogger
-            lines = text.split('\n')
-            for line in lines:
-                if line.strip():
-                    ConsoleLogger.question(line.strip())
+        # Provide a safe send callback so the parser can respond to prompts.
+        self.message_parser.handle_data(
+            data,
+            lambda line: self.network_helper.send_line(self.client_socket, line),
+        )
+
+    def start_countdown(self, seconds):
+        """Start a countdown timer for a question (called by parser)."""
+        self.countdown_end_time = time.time() + seconds
+        self.displaying_countdown = True
+        self.last_countdown_display = 0
+        self.countdown_duration = seconds
+
+    def _update_countdown_display(self):
+        """Display and update the countdown timer at the top of the screen."""
+        if not self.countdown_end_time:
             return
         
-        # Only print non-prompt messages
-        if not handled:
-            print(text, end="", flush=True)
-
-    def _handle_prompts(self, text):
-        """Handle server prompts and return True if a prompt was handled."""
-        lines = text.lower().split('\n')
-        for lowered in lines:
-            lowered = lowered.strip()
-            if not self.name_sent and "enter your username" in lowered:
-                ConsoleLogger.prompt("Enter your username:")
-                name = input().strip()
-                if not name:
-                    name = "Player"
-                self._send_line(name)
-                self.name_sent = True
-                return True
-
-            if "successfully" in lowered:
-                ConsoleLogger.success(lowered)
-                return True
-            
-            if "join <room id>" in lowered or "host <game name>" in lowered:
-                ConsoleLogger.prompt(lowered)
-                command = input().strip()
-                if command:
-                    self._send_line(command)
-                return True
-
-            if "invalid command" in lowered or "invalid room id" in lowered or "game name cannot be empty" in lowered or "invalid host command" in lowered:
-                ConsoleLogger.prompt(lowered)
-                command = input().strip()
-                if command:
-                    self._send_line(command)
-                return True
-
-            if "type start" in lowered and "list" in lowered and "close" in lowered:
-                ConsoleLogger.prompt(lowered)
-                command = input().strip()
-                if command:
-                    self._send_line(command)
-                return True
-
-            if "how many questions would you like?" in lowered:
-                ConsoleLogger.prompt(lowered)
-                num_q = input().strip()
-                if num_q.isdigit() and int(num_q) > 0:
-                    self._send_line(num_q)
-                    return True
-            
-            if "select a theme" in lowered and ("general" in lowered or "math" in lowered or "cyber" in lowered or "nature" in lowered):
-                ConsoleLogger.prompt(lowered)
-                theme = input().strip()
-                if theme:
-                    self._send_line(theme)
-                return True
-            
-            if "invalid theme" in lowered:
-                ConsoleLogger.prompt(lowered)
-                theme = input().strip()
-                if theme:
-                    self._send_line(theme)
-                return True
-                
-            if "type 1-4" in lowered or "type 1, 2, 3, or 4" in lowered:
-                ConsoleLogger.question_counter(lines[0].strip())
-                ConsoleLogger.question(lines[1].strip())
-                for i in range(2, 6):
-                    ConsoleLogger.option(lines[i].strip(), i)
-                ConsoleLogger.prompt(lowered)
-                answer = input().strip()
-                if answer:
-                    self._send_line(answer)
-                return True
-            
-            if "players:" in lowered:
-                ConsoleLogger.info(lowered)
-                command = input().strip()
-                if command:
-                    self._send_line(command)
-                return True
-            
-            if "room closed" in lowered:
-                ConsoleLogger.info(lowered)
-                command = input().strip()
-                if command:
-                    self._send_line(command)
-                return True
-
-            if "Invalid answer" in lowered:
-                ConsoleLogger.error(lowered)
-                answer = input().strip()
-                if answer:
-                    self._send_line(answer)
-                return True
-            
-            if "game" in lowered and "hosted" in lowered:
-                ConsoleLogger.success(lowered)
-
-            if "available rooms" in lowered:
-                ConsoleLogger.info(lowered)
-                ConsoleLogger.prompt("Type 'Host <game name>' to host, 'Join <room ID>' to join, or 'View Rooms' to see available rooms:")
-                answer = input().strip()
-                if answer:
-                    self._send_line(answer)
-                return True
-
-        return False
-
-    def _send_line(self, line):
-        if not self.is_running:
+        current_time = time.time()
+        remaining = max(0, int(self.countdown_end_time - current_time))
+        
+        # Only update display once per second to avoid spam.
+        if current_time - self.last_countdown_display < 1.0 and remaining > 0:
             return
-        try:
-            self.client_socket.sendall((line + "\n").encode())
-        except Exception:
-            self.is_running = False
+        
+        self.last_countdown_display = current_time
+        
+        # Update countdown at top of screen using ANSI positioning
+        ConsoleLogger.update_countdown_timer(remaining)
+        
+        if remaining == 0:
+            self.displaying_countdown = False
+            self.countdown_end_time = None
+
+    def _input_thread_worker(self):
+        """DEPRECATED: No longer used (threading removed)."""
+        pass
 
     def close(self):
+        """Stop the client and close the socket safely."""
         self.is_running = False
         try:
             self.client_socket.close()

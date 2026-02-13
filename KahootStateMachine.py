@@ -14,6 +14,7 @@ STATE_AWAITING_THEME = "awaiting_theme"
 
 class KahootStateMachine:
     def __init__(self, clients, client_state, client_data, socket_to_player, game_control, network_helper):
+        # Shared server state and helper dependencies.
         self.clients = clients
         self.client_state = client_state
         self.client_data = client_data
@@ -25,7 +26,7 @@ class KahootStateMachine:
         """Route a message based on the current client state."""
         state = self.client_state.get(sock)
 
-        # state routing
+        # State routing based on the client lifecycle.
         if state == STATE_AWAITING_USERNAME:
             self._handle_username(sock, text)
         elif state == STATE_IN_LOBBY:
@@ -47,6 +48,7 @@ class KahootStateMachine:
         if not username:
             username = "Player"
 
+        # Create player entry and move client to lobby.
         player = Player(sock, username)
         self.clients.append(player)
         self.socket_to_player[sock] = player
@@ -64,7 +66,7 @@ class KahootStateMachine:
             return
 
         if text.lower().strip() == "view rooms":
-            self.send_room_list(sock)
+            self.network_helper.send_room_list(sock, self.game_control.rooms)
             return
 
         if text.lower().startswith("host "):
@@ -73,6 +75,7 @@ class KahootStateMachine:
                 self.network_helper.send_line(sock, "Game name cannot be empty. Please try again.")
                 return
 
+            # Create room and mark host state.
             room_id = str(len(self.game_control.rooms) + 1).zfill(4)
             room = Room(room_id, player)
             self.game_control.rooms[room_id] = room
@@ -94,6 +97,7 @@ class KahootStateMachine:
                 self.network_helper.send_line(sock, "Game already started. Try another room.")
                 return
 
+            # Add player to room and update state.
             room.players.append(player)
             room.scores[player] = 0
             self.client_state[sock] = STATE_IN_ROOM
@@ -120,6 +124,7 @@ class KahootStateMachine:
             self.network_helper.send_text(sock, "Invalid number. Please enter a positive integer: ")
             return
 
+        # Persist question count and advance flow to theme selection.
         question_count = int(text)
         ConsoleLogger.room_event(room.room_id, f"Set to {question_count} questions")
 
@@ -144,6 +149,7 @@ class KahootStateMachine:
             self.network_helper.send_line(sock, "Invalid theme. Please choose: general, math, cyber, or nature:")
             return
 
+        # Start game for all players in the room.
         ConsoleLogger.room_event(room.room_id, f"Theme selected: {theme}")
 
         room.theme = theme
@@ -203,6 +209,7 @@ class KahootStateMachine:
         answer_valid = self.game_control.process_answer(room.room_id, sock, text)
 
         if answer_valid:
+            # Compare submitted answer to the current correct answer.
             game_state = self.game_control.active_games[room.room_id]
             correct_answer = game_state['correct_answer']
             if text.strip() == correct_answer:
@@ -212,31 +219,12 @@ class KahootStateMachine:
         else:
             self.network_helper.send_line(sock, "Invalid answer. Type 1, 2, 3, or 4 and press Enter.")
 
-    def send_room_list(self, conn):
-        """Send list of active rooms to a client."""
-        lines = []
-        if not self.game_control.rooms:
-            lines.append("No active games.")
-        else:
-            for room_id, room in self.game_control.rooms.items():
-                lines.append(
-                    f"Room {room_id} - Host: {room.host_client.username} - Players: {len(room.players)}"
-                )
-
-        payload = "AVLIABLE ROOMS\n" + "\n".join(lines)
-        self.network_helper.send_text(conn, payload)
-
-    def broadcast_lobby_room_list(self):
-        """Broadcast updated room list to all lobby clients."""
-        for sock, state in list(self.client_state.items()):
-            if state == STATE_IN_LOBBY:
-                self.send_room_list(sock)
-
     def close_room(self, room):
         """Close a room and return players to lobby."""
         if room.room_id not in self.game_control.rooms:
             return
 
+        # Reset all players in the room back to lobby.
         for player in list(room.players):
             self.client_state[player.conn] = STATE_IN_LOBBY
 

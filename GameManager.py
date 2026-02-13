@@ -1,13 +1,9 @@
-import socket
-import random
-import csv
 import time
-import select
 from NetworkHelpers import NetworkHelpers
 from ConsoleLogger import ConsoleLogger
-################## Game Logic ###################
 class GameManager:
     def __init__(self):
+        # Tracks rooms and active game state across the server.
         self.rooms = {}
         self.game_questions_count = 2
         self.timeout = 20
@@ -16,7 +12,8 @@ class GameManager:
 
     def init_game(self, room, num_questions, theme="general"):
         """Initialize a game state machine for a room (non-blocking)."""
-        questions = self._load_questions(num_questions=num_questions, theme=theme)
+        # Build a new game_state entry for the room.
+        questions = room.load_questions(num_questions=num_questions, theme=theme, default_count=self.game_questions_count)
         
         game_state = {
             'room': room,
@@ -35,6 +32,7 @@ class GameManager:
 
     def get_current_question(self, room_id):
         """Get the current question to display (returns formatted string)."""
+        # Return None when the room is missing or out of questions.
         if room_id not in self.active_games:
             return None
         
@@ -62,6 +60,7 @@ class GameManager:
 
     def send_next_question(self, room_id):
         """Send the next question to all players in a room."""
+        # Push the next question to every player and reset round state.
         if room_id not in self.active_games:
             return
         
@@ -88,6 +87,7 @@ class GameManager:
 
     def process_answer(self, room_id, player_conn, answer_text):
         """Process an answer from a player (non-blocking)."""
+        # Validate and record a single player's answer.
         if room_id not in self.active_games:
             return False
         
@@ -129,6 +129,7 @@ class GameManager:
 
     def update_game(self, room_id):
         """Update game state - check timeouts and advance questions (non-blocking)."""
+        # Advance question state based on timeouts and responses.
         if room_id not in self.active_games:
             return False  # Game doesn't exist
         
@@ -159,6 +160,7 @@ class GameManager:
 
     def _show_question_results(self, room_id):
         """Show results for current question."""
+        # Tally and broadcast results for the current question.
         if room_id not in self.active_games:
             return
         
@@ -200,6 +202,7 @@ class GameManager:
 
     def end_game(self, room_id):
         """End a game and show final leaderboard."""
+        # Send final scores, then remove the game from active state.
         if room_id not in self.active_games:
             return
         
@@ -231,176 +234,18 @@ class GameManager:
         
         ConsoleLogger.room_event(room_id, "Game ended")
 
-    def run_room_game(self, room, num_questions=None):
-        """DEPRECATED: Old blocking method. Use init_game + update_game instead."""
-        self.theme = room.theme
-        """Run the game loop for a specific room with independent scores."""
-        if num_questions is None:
-            num_questions = self.game_questions_count
-        room.questions = self._load_questions(num_questions=num_questions)
+    def update_active_games(self):
+        """Update all active games and return rooms that finished."""
+        # Iterate through all active games and collect finished rooms.
+        finished_rooms = []
+        for room_id in list(self.active_games.keys()):
+            game_state = self.active_games.get(room_id)
+            if not game_state:
+                continue
 
-        for i, q_data in enumerate(room.questions):
-            if not room.players:
-                ConsoleLogger.warn("No players left in room. Ending game.")
-                break
+            is_running = self.update_game(room_id)
+            if not is_running:
+                self.end_game(room_id)
+                finished_rooms.append(game_state['room'])
 
-            self.clear_room_screens(room)
-
-            # Parse question data
-            q_text, o1, o2, o3, o4, correct = q_data
-            correct = str(correct).strip()
-
-            # Format and broadcast question to room
-            prompt = (
-                f"Question {i+1}/{num_questions}:\n"
-                f"{q_text}\n"
-                f"1) {o1}\n"
-                f"2) {o2}\n"
-                f"3) {o3}\n"
-                f"4) {o4}\n\n"
-                f"You have {self.timeout} seconds. Type 1-4 and press Enter:\n"
-            )
-            self.network_helper.broadcast_room(room, prompt)
-
-            # Collect answers from room players
-            answered_this_round = set()
-            answers_this_round = {}  # Maps socket -> answer
-            deadline = time.time() + self.timeout
-            conn_to_player = {p.conn: p for p in room.players}  # Mapping for socket to Player
-
-            while time.time() < deadline and len(answered_this_round) < len(room.players):
-                remaining = deadline - time.time()
-                wait_time = 1 if remaining > 1 else max(0, remaining)
-                try:
-                    readable, _, _ = select.select(list(conn_to_player.keys()), [], [], wait_time)
-                except OSError:
-                    continue
-
-                for s in readable:
-                    if s in answered_this_round:
-                        continue  # Already answered this round
-
-                    try:
-                        data = s.recv(1024)
-                    except (ConnectionError, OSError):
-                        self._drop_client(s)
-                        continue
-
-                    if not data:  # Connection closed
-                        self._drop_client(s)
-                        continue
-
-                    text = data.decode(errors="ignore").strip()
-
-                    # Extract first digit 1-4 from response
-                    answer = None
-                    if text == "1" or text == "2" or text == "3" or text == "4":
-                        answer = text.strip()
-                        
-
-                    if answer is None:
-                        self.network_helper.send_line(s, "Invalid answer. Type 1, 2, 3, or 4 and press Enter.")
-                        continue
-
-                    # Record answer and update room score if correct
-                    answers_this_round[s] = answer
-                    player = conn_to_player.get(s)
-                    if player is not None and answer == correct:
-                        room.scores[player] = room.scores.get(player, 0) + 1
-                        self.network_helper.send_line(s, "Correct!")
-                    else:
-                        self.network_helper.send_line(s, "Wrong!")
-                    answered_this_round.add(s)
-
-            # Tally results for the room
-            correct_players = 0
-            wrong_players = 0
-            no_answer_players = 0
-            for p in list(room.players):
-                if p.conn in answers_this_round:
-                    if answers_this_round[p.conn] == correct:
-                        correct_players += 1
-                    else:
-                        wrong_players += 1
-                else:
-                    no_answer_players += 1
-
-            # Format and broadcast round summary
-            summary = f"\n Time! Correct answer was: {correct}\n"
-            if correct_players:
-                summary += f" Correct: {correct_players} players\n"
-            if wrong_players:
-                summary += f" Wrong: {wrong_players} players\n"
-            if no_answer_players:
-                summary += f" No answer: {no_answer_players} players\n"
-
-            self.network_helper.broadcast_room(room, summary)
-            self.network_helper.broadcast_room(room, "Moving to next question...\n")
-            time.sleep(3.5)  # Pause before next question
-
-        # Display room-specific leaderboard when game ends
-        self.show_room_leaderboard(room)
-
-    def clear_room_screens(self, room):
-        self.network_helper.clear_room_screens(room)
-
-    def _load_questions(self, filename=None, num_questions=None, theme=None):
-        if num_questions is None:
-            num_questions = self.game_questions_count
-        
-        # Map theme to CSV filename
-        if filename is None:
-            if theme is None:
-                theme = "general"
-            theme_files = {
-                "general": "questions/for questions.csv",
-                "math": "questions/for math.csv",
-                "cyber": "questions/for cybersec.csv",
-                "nature": "questions/for nature.csv"
-            }
-            filename = theme_files.get(theme, "questions/for questions.csv")
-        
-        try:
-            with open(filename, 'r', encoding='utf-8', newline='') as file:
-                reader = csv.reader(file)
-                all_questions = []
-                for row in reader:
-                    if len(row) != 6:
-                        continue
-                    all_questions.append([cell.strip() for cell in row])
-
-            return random.sample(all_questions, min(len(all_questions), num_questions))
-        except FileNotFoundError:
-            # Fallback to default questions if theme file doesn't exist
-            with open('questions/for questions.csv', 'r', encoding='utf-8', newline='') as file:
-                reader = csv.reader(file)
-                all_questions = []
-                for row in reader:
-                    if len(row) != 6:
-                        continue
-                    all_questions.append([cell.strip() for cell in row])
-
-            return random.sample(all_questions, min(len(all_questions), num_questions))
-
-    def show_room_leaderboard(self, room):
-        """Display the leaderboard for a specific room and clean up."""
-        self.network_helper.clear_room_screens(room)
-        sorted_results = sorted(room.scores.items(), key=lambda item: item[1], reverse=True)
-        leaderboard_msg = "\n--- FINAL LEADERBOARD ---\n"
-        rankings = {}  # Group players by score
-        for player, score in sorted_results:
-            name = player.username
-
-            if score not in rankings:
-                rankings[score] = []
-
-            rankings[score].append(name)
-
-        # Format leaderboard with ranking
-        place = 1
-        for score in sorted(rankings.keys(), reverse=True):
-            players = ", ".join(rankings[score])
-            leaderboard_msg += f"{place}. {players} with {score} points\n"
-            place += len(rankings[score])
-
-        self.network_helper.broadcast_room(room, leaderboard_msg + "\nThanks for playing!\n")
+        return finished_rooms

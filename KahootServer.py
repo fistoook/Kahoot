@@ -19,8 +19,9 @@ from KahootStateMachine import (
 
 
 CLIENT_DISCONNECTED = "CLIENT_DISCONNECTED"
-CLIENT_RESPONSE_TIMEOUT = 60
-WELCOME_MESSAGE = "\n\033[1;35m╔══════════════════════════════════════╗\n║     WELCOME TO KAHOOT!               ║\n║                                      ║\n║   Get ready for an epic quiz!        ║\n╚══════════════════════════════════════╝\033[0m\n\n"
+CLIENT_RESPONSE_TIMEOUT = 90
+# ASCII-safe welcome message for Windows console compatibility
+WELCOME_MESSAGE = "\n\033[1;35m========================================\n|     WELCOME TO KAHOOT!              |\n|                                      |\n|   Get ready for an epic quiz!        |\n========================================\033[0m\n\n"
 
 class KahootServer:
     def __init__(self, host='127.0.0.1', port=5555):
@@ -84,7 +85,11 @@ class KahootServer:
                 self._handle_client_message(sock)
             
             # Update all active games (non-blocking) - server checks timeouts, GameManager updates state
-            self._update_active_games()
+            finished_rooms = self.game_control.update_active_games()
+            for room in finished_rooms:
+                for player in list(room.players):
+                    self.client_state[player.conn] = STATE_IN_LOBBY
+                self.state_machine.close_room(room)
 
             # Update header when counts change
             ConsoleLogger.update_server_header(
@@ -97,7 +102,7 @@ class KahootServer:
         """Process incoming data from a client based on its current state."""
         try:
             data = sock.recv(4096)
-        except (ConnectionError, OSError):
+        except (ConnectionError, OSError) as e:
             self._drop_client(sock)
             return
 
@@ -106,6 +111,8 @@ class KahootServer:
             return
 
         text = data.decode(errors="ignore").strip()
+
+        # Pass the message to the state machine for handling
         self.state_machine.handle_message(sock, text)
 
     def _drop_client(self, sock):
@@ -123,25 +130,6 @@ class KahootServer:
         except:
             pass
 
-    def _update_active_games(self):
-        """
-        Update all active games each loop iteration.
-        GameManager handles all game logic; server just calls update.
-        """
-        for room_id in list(self.game_control.active_games.keys()):
-            game_state = self.game_control.active_games.get(room_id)
-            if not game_state:
-                continue
-            
-            # Let GameManager update game state
-            is_running = self.game_control.update_game(room_id)
-            
-            if not is_running:
-                # Game finished
-                self.game_control.end_game(room_id)
-                room = game_state['room']
-                # Return players to lobby
-                for player in list(room.players):
-                    self.client_state[player.conn] = STATE_IN_LOBBY
-                # Close room
-                self.state_machine.close_room(room)
+if __name__ == "__main__":
+    server = KahootServer()
+    server.Run()

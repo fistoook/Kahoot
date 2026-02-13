@@ -1,13 +1,7 @@
-"""
-Centralized styled console logging for the Kahoot application.
-Provides consistent, colored logging throughout all modules.
-"""
-
 import sys
 from colorama import Fore, Style, init
 
 init(autoreset=True)
-
 
 class ConsoleLogger:
     """Centralized logger with styled console output."""
@@ -87,6 +81,13 @@ class ConsoleLogger:
         print(f"{Fore.WHITE}{Style.BRIGHT}[GAME]{Style.RESET_ALL} {message}")
 
     @staticmethod
+    def room(message):
+        """Log a room event in bright blue."""
+        if ConsoleLogger._server_console_enabled:
+            return
+        print(f"{Fore.LIGHTBLUE_EX}{Style.BRIGHT}[ROOM]{Style.RESET_ALL} {message}")
+
+    @staticmethod
     def server_event(message):
         """Log a server event in bright white."""
         if ConsoleLogger._server_console_enabled:
@@ -113,6 +114,13 @@ class ConsoleLogger:
         print(f"{Fore.LIGHTBLUE_EX}{Style.BRIGHT}[ROOM {room_id}]{Style.RESET_ALL} {message}")
 
     @staticmethod
+    def joined():
+        """Log a player joining."""
+        if ConsoleLogger._server_console_enabled:
+            return
+        print(f"{Fore.GREEN}{Style.BRIGHT}[JOINED]{Style.RESET_ALL}")
+
+    @staticmethod
     def separator(char="=", length=60):
         """Print a separator line."""
         print(f"{Fore.LIGHTBLACK_EX}{char * length}{Style.RESET_ALL}")
@@ -137,11 +145,11 @@ class ConsoleLogger:
             return
         welcome_text = f"""
 {Fore.MAGENTA}{Style.BRIGHT}
-╔══════════════════════════════════════╗
-║     WELCOME TO KAHOOT!               ║
-║                                      ║
-║   Get ready for an epic quiz!        ║
-╚══════════════════════════════════════╝
+========================================
+|     WELCOME TO KAHOOT!              |
+|                                      |
+|   Get ready for an epic quiz!        |
+========================================
 {Style.RESET_ALL}
         """
         print(welcome_text)
@@ -159,29 +167,50 @@ class ConsoleLogger:
     def question_counter(counter):
         """Display a question counter in cyan."""
         print(f"{Fore.CYAN}{Style.BRIGHT}[Count {counter}]{Style.RESET_ALL}")
+    
+    @staticmethod
+    def countdown_timer(seconds_remaining):
+        """Display a countdown timer at the current cursor position (for initial display)."""
+        if seconds_remaining > 0:
+            print(f"{Fore.YELLOW}{Style.BRIGHT}⏱  TIME REMAINING: {seconds_remaining:2d} seconds{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.RED}{Style.BRIGHT}⏱  TIME'S UP!{Style.RESET_ALL}")
+    
+    @staticmethod
+    def update_countdown_timer(seconds_remaining):
+        """Update countdown timer in place using ANSI escape codes."""
+        # Save cursor, move to line 1, clear line, print timer, restore cursor
+        if seconds_remaining > 0:
+            timer_text = f"{Fore.YELLOW}{Style.BRIGHT}⏱  TIME REMAINING: {seconds_remaining:2d} seconds{Style.RESET_ALL}"
+        else:
+            timer_text = f"{Fore.RED}{Style.BRIGHT}⏱  TIME'S UP!{Style.RESET_ALL}                    "
+        
+        # ANSI: Save cursor (\x1b[s), move to line 1 (\x1b[1;1H), clear line (\x1b[2K), print, restore cursor (\x1b[u)
+        print(f"\x1b[s\x1b[1;1H\x1b[2K{timer_text}\x1b[u", end="", flush=True)
+    
     @staticmethod
     def rooms_panel(room_lines):
-        """Display a gorgeously styled rooms panel in the client console."""
-        # Create fancy border with box drawing characters
-        top_border = f"{Fore.CYAN}{Style.BRIGHT}╔{'═'*70}╗{Style.RESET_ALL}"
-        mid_border = f"{Fore.CYAN}╠{'═'*70}╣{Style.RESET_ALL}"
-        bottom_border = f"{Fore.CYAN}╚{'═'*70}╝{Style.RESET_ALL}"
+        """Display a styled rooms panel in the client console (ASCII-safe)."""
+        # Create border with ASCII characters for Windows console compatibility
+        top_border = f"{Fore.CYAN}{Style.BRIGHT}+{'-'*70}+{Style.RESET_ALL}"
+        mid_border = f"{Fore.CYAN}+{'-'*70}+{Style.RESET_ALL}"
+        bottom_border = f"{Fore.CYAN}+{'-'*70}+{Style.RESET_ALL}"
         
         print("\n" + top_border)
-        title = f"{Fore.CYAN}{Style.BRIGHT}║{'AVAILABLE ROOMS':^70}║{Style.RESET_ALL}"
+        title = f"{Fore.CYAN}{Style.BRIGHT}|{'AVAILABLE ROOMS':^70}|{Style.RESET_ALL}"
         print(title)
         print(mid_border)
         
         if not room_lines:
             empty_msg = f"{Fore.LIGHTBLACK_EX}No rooms available - Host a game to get started!{Style.RESET_ALL}"
-            print(f"{Fore.CYAN}║{Style.RESET_ALL} {empty_msg:68} {Fore.CYAN}║{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}|{Style.RESET_ALL} {empty_msg:68} {Fore.CYAN}|{Style.RESET_ALL}")
         else:
             for i, line in enumerate(room_lines, 1):
                 # Add numbering and styling
                 styled_line = f"{Fore.YELLOW}{i}.{Style.RESET_ALL} {Fore.WHITE}{line}{Style.RESET_ALL}"
                 # Pad to fit in box (accounting for ANSI codes)
                 padding = 68 - len(line) - 3  # 3 for "N. "
-                print(f"{Fore.CYAN}║{Style.RESET_ALL} {styled_line}{' ' * padding} {Fore.CYAN}║{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}|{Style.RESET_ALL} {styled_line}{' ' * padding} {Fore.CYAN}|{Style.RESET_ALL}")
         
         print(bottom_border + "\n")
 
