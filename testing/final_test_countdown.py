@@ -34,7 +34,7 @@ def final_countdown_test():
     
     try:
         print("[2/5] Importing client modules...")
-        from clientKahoot import KahootClient
+        from KahootClient import KahootClient
         from KahootClientParser import KahootClientMessageParser
         
         print("[3/5] Setting up test scenario...")

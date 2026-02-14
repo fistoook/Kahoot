@@ -1,5 +1,6 @@
-﻿import socket
+import socket
 import time
+import math
 from ConsoleLogger import ConsoleLogger
 from KahootClientParser import KahootClientMessageParser
 from NetworkHelpers import NetworkHelpers
@@ -88,7 +89,7 @@ class KahootClient:
             return
         
         current_time = time.time()
-        remaining = max(0, int(self.countdown_end_time - current_time))
+        remaining = max(0, math.ceil(self.countdown_end_time - current_time))
         
         # Only update display once per second to avoid spam.
         if current_time - self.last_countdown_display < 1.0 and remaining > 0:
@@ -102,10 +103,6 @@ class KahootClient:
         if remaining == 0:
             self.displaying_countdown = False
             self.countdown_end_time = None
-
-    def _input_thread_worker(self):
-        """DEPRECATED: No longer used (threading removed)."""
-        pass
 
     def close(self):
         """Stop the client and close the socket safely."""

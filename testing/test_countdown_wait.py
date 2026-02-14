@@ -34,7 +34,7 @@ def test_countdown_updates():
     time.sleep(2)
     
     try:
-        from clientKahoot import KahootClient
+        from KahootClient import KahootClient
         from KahootClientParser import KahootClientMessageParser
         
         # Track when we reach the question

@@ -60,10 +60,10 @@ class Room:
         prompt = (
             f"Question {index+1}/{num_questions}:\n"
             f"{q_text}\n"
-            f"1) {o1}\n"
-            f"2) {o2}\n"
-            f"3) {o3}\n"
-            f"4) {o4}\n\n"
+            f"{o1}\n"
+            f"{o2}\n"
+            f"{o3}\n"
+            f"{o4}\n\n"
             f"You have {timeout} seconds. Type 1-4 and press Enter:\n"
         )
         return prompt, correct

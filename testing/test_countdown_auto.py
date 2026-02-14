@@ -36,7 +36,7 @@ def test_with_mock_input():
         print("[2] Starting client with mocked inputs...")
         
         # Import client components
-        from clientKahoot import KahootClient
+        from KahootClient import KahootClient
         from KahootClientParser import KahootClientMessageParser
         
         # Create mock input function

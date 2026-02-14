@@ -56,7 +56,7 @@ class KahootStateMachine:
 
         ConsoleLogger.player_action(username, "Joined from " + str(sock.getpeername()))
 
-        self.network_helper.send_line(sock, "Successfully joined our server!")
+        self.network_helper.send_line(sock, f"{username}, you have successfully joined Kahoot!")
         self.network_helper.send_line(sock, "Type 'Host <game name>' to host, 'Join <room ID>' to join, or 'View Rooms' to see available rooms:")
 
     def _handle_lobby_command(self, sock, text):
@@ -104,11 +104,11 @@ class KahootStateMachine:
             self.client_data[sock]["room"] = room
 
             ConsoleLogger.room_event(room_id, f"{player.username} joined")
-            self.network_helper.send_line(sock, f"Joined '{room.host_client.username}' room! Waiting to start...")
+            self.network_helper.send_line(sock, f"Joined {room.host_client.username}'s room #{room_id}! Waiting to start...")
             self.network_helper.send_line(room.host_client.conn, f"{player.username} joined!")
 
         else:
-            self.network_helper.send_line(sock, "Invalid command. Type 'Host <name>', 'Join <ID>', or 'View Rooms'.")
+            self.network_helper.send_line(sock, "Invalid command. Type 'Host <name>', 'Join <ID>', or 'View Rooms':")
 
     def _handle_question_count(self, sock, text):
         """Process the number of questions from host."""
@@ -121,7 +121,7 @@ class KahootStateMachine:
             return
 
         if not text.isdigit() or int(text) <= 0:
-            self.network_helper.send_text(sock, "Invalid number. Please enter a positive integer: ")
+            self.network_helper.send_line(sock, "Invalid number. Please enter a positive integer: ")
             return
 
         # Persist question count and advance flow to theme selection.

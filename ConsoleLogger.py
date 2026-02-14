@@ -1,5 +1,7 @@
 import sys
 from colorama import Fore, Style, init
+import os
+import pyfiglet
 
 init(autoreset=True)
 
@@ -137,6 +139,34 @@ class ConsoleLogger:
             return
         print(f"{Fore.YELLOW}{Style.BRIGHT}[ONGOING]{Style.RESET_ALL} {message}", end=" ", flush=True)
 
+    @staticmethod
+    def Menu():
+        title = pyfiglet.figlet_format("Menu", font="slant")
+        if ConsoleLogger._server_console_enabled:
+            return
+        print(f"{Fore.MAGENTA}{Style.BRIGHT}{title}{Style.RESET_ALL}")
+
+    @staticmethod
+    def Rooms():
+        title = pyfiglet.figlet_format("Rooms", font="slant")
+        if ConsoleLogger._server_console_enabled:
+            return
+        print(f"{Fore.CYAN}{Style.BRIGHT}{title}{Style.RESET_ALL}")
+
+    @staticmethod
+    def Game(game_id):
+        title = pyfiglet.figlet_format(f"Game {game_id}", font="slant")
+        if ConsoleLogger._server_console_enabled:
+            return
+        print(f"{Fore.YELLOW}{Style.BRIGHT}{title}{Style.RESET_ALL}")
+
+    @staticmethod
+    def Kahoot():
+        title = pyfiglet.figlet_format("Kahoot!", font="slant")
+        if ConsoleLogger._server_console_enabled:
+            return
+        print(f"{Fore.MAGENTA}{Style.BRIGHT}{title}{Style.RESET_ALL}")
+
 
     @staticmethod
     def welcome():
@@ -166,28 +196,42 @@ class ConsoleLogger:
     @staticmethod
     def question_counter(counter):
         """Display a question counter in cyan."""
-        print(f"{Fore.CYAN}{Style.BRIGHT}[Count {counter}]{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}{Style.BRIGHT}[{counter}]{Style.RESET_ALL}")
+
+    @staticmethod
+    def question(question_number):
+        """Display a question number in cyan."""
+        question = pyfiglet.figlet_format(f"Question {question_number}", font="slant")
+        if ConsoleLogger._server_console_enabled:
+            return
+        print(f"{Fore.CYAN}{Style.BRIGHT}{question}{Style.RESET_ALL}")
     
+    @staticmethod
+    def Welcome():
+        welcome = pyfiglet.figlet_format("Welcome to Kahoot!", font="slant")
+        """Display a big bold purple welcome message."""
+        if ConsoleLogger._server_console_enabled:
+            return
+        print(f"{Fore.MAGENTA}{Style.BRIGHT}{welcome}{Style.RESET_ALL}")
+
     @staticmethod
     def countdown_timer(seconds_remaining):
-        """Display a countdown timer at the current cursor position (for initial display)."""
+        """Display a countdown timer at the current cursor position (ASCII-safe)."""
         if seconds_remaining > 0:
-            print(f"{Fore.YELLOW}{Style.BRIGHT}⏱  TIME REMAINING: {seconds_remaining:2d} seconds{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}{Style.BRIGHT}[TIMER] TIME REMAINING: {seconds_remaining:2d} seconds{Style.RESET_ALL}")
         else:
-            print(f"{Fore.RED}{Style.BRIGHT}⏱  TIME'S UP!{Style.RESET_ALL}")
-    
+            print(f"{Fore.RED}{Style.BRIGHT}[TIMER] TIME IS UP!{Style.RESET_ALL}")
+
     @staticmethod
     def update_countdown_timer(seconds_remaining):
-        """Update countdown timer in place using ANSI escape codes."""
-        # Save cursor, move to line 1, clear line, print timer, restore cursor
+        """Update countdown timer in place using ANSI escape codes (ASCII-safe)."""
         if seconds_remaining > 0:
-            timer_text = f"{Fore.YELLOW}{Style.BRIGHT}⏱  TIME REMAINING: {seconds_remaining:2d} seconds{Style.RESET_ALL}"
+            timer_text = f"{Fore.YELLOW}{Style.BRIGHT}[TIMER] TIME REMAINING: {seconds_remaining:2d} seconds{Style.RESET_ALL}"
         else:
-            timer_text = f"{Fore.RED}{Style.BRIGHT}⏱  TIME'S UP!{Style.RESET_ALL}                    "
-        
-        # ANSI: Save cursor (\x1b[s), move to line 1 (\x1b[1;1H), clear line (\x1b[2K), print, restore cursor (\x1b[u)
+            timer_text = f"{Fore.RED}{Style.BRIGHT}[TIMER] TIME IS UP!{Style.RESET_ALL}                    "
+
         print(f"\x1b[s\x1b[1;1H\x1b[2K{timer_text}\x1b[u", end="", flush=True)
-    
+
     @staticmethod
     def rooms_panel(room_lines):
         """Display a styled rooms panel in the client console (ASCII-safe)."""
@@ -388,3 +432,8 @@ class ConsoleLogger:
             sys.stdout.write("\033[u")
             sys.stdout.flush()
             ConsoleLogger._room_row += 1
+
+    def clear_console():
+        """Clear the console screen."""
+        os.system('cls' if os.name == 'nt' else 'clear')
+
