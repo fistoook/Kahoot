@@ -5,6 +5,7 @@ import os
 import sys
 
 LOBBY_PROMPT = "Type 'Host <game name>' to host, 'Join <room ID>' to join, or 'View Rooms' to see available rooms:"
+POST_GAME_PROMPT = "Game finished. Type 'lobby' to return to lobby or 'exit' to quit."
 
 if os.name == "nt":
     import msvcrt
@@ -36,7 +37,7 @@ class KahootClientMessageParser:
             for line in lines:
                 cleaned = self._clean_line(line)
                 if cleaned:
-                    ConsoleLogger.question(cleaned)
+                    ConsoleLogger.question_text(cleaned)
             return
 
         if not handled:
@@ -47,6 +48,16 @@ class KahootClientMessageParser:
         raw_lines = text.split("\n")
         lowered_lines = [line.lower().strip() for line in raw_lines]
         accepted = False
+
+        if any("round_summary_start" in line for line in lowered_lines):
+            self._print_question_summary(raw_lines)
+            return True
+
+        if any("leaderboard_start" in line for line in lowered_lines):
+            self._print_leaderboard(raw_lines)
+            if any("type 'lobby'" in line and "type 'exit'" in line for line in lowered_lines):
+                self._prompt_post_game_choice(send_line)
+            return True
 
         for i, lowered in enumerate(lowered_lines):
             lowered = lowered.strip()
@@ -150,7 +161,6 @@ class KahootClientMessageParser:
 
             if ("type 1-4" in lowered or "type 1, 2, 3, or 4" in lowered):
                 ConsoleLogger.clear_console()
-
                 timeout_seconds = self._extract_timeout_seconds(text)
 
                 if self.client:
@@ -158,10 +168,9 @@ class KahootClientMessageParser:
                 ConsoleLogger.countdown_timer(timeout_seconds)
 
                 counter, question_text, options = self._extract_question_block(raw_lines)
-                if counter:
-                    ConsoleLogger.question_counter(counter)
+                ConsoleLogger.question_counter(counter if counter else "")
                 if question_text:
-                    ConsoleLogger.question(question_text)
+                    ConsoleLogger.question_text(question_text)
 
                 if options:
                     print()
@@ -223,6 +232,17 @@ class KahootClientMessageParser:
                     send_line(answer)
                 return True
 
+            if POST_GAME_PROMPT.lower() in lowered:
+                self._prompt_post_game_choice(send_line)
+                return True
+
+            if "wrong!" in lowered:
+                ConsoleLogger.wrong_answer()
+                return True
+
+            if "correct!" in lowered:
+                ConsoleLogger.correct_answer()
+                return True
         return accepted
 
     def _extract_timeout_seconds(self, text):
@@ -355,3 +375,72 @@ class KahootClientMessageParser:
         """Remove ANSI escape sequences and common control characters."""
         cleaned = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", line)
         return cleaned.replace("\r", "")
+
+    def _print_question_summary(self, raw_lines):
+        """Render structured round summary block from server payload."""
+        cleaned_lines = [self._clean_line(line).strip() for line in raw_lines]
+        in_summary = False
+
+        ConsoleLogger.clear_console()
+        ConsoleLogger.title("Round Summary")
+
+        for cleaned in cleaned_lines:
+            lowered = cleaned.lower()
+            if lowered == "round_summary_start":
+                in_summary = True
+                continue
+            if lowered == "round_summary_end":
+                in_summary = False
+                continue
+            if not cleaned:
+                continue
+
+            if in_summary:
+                if lowered.startswith("round ") or lowered.startswith("correct answer:"):
+                    ConsoleLogger.round_over(cleaned)
+                else:
+                    ConsoleLogger.round_summary(cleaned)
+            elif "moving to next question" in lowered:
+                ConsoleLogger.info(cleaned)
+
+    def _print_leaderboard(self, raw_lines):
+        """Render structured leaderboard block from server payload."""
+        cleaned_lines = [self._clean_line(line).strip() for line in raw_lines]
+        in_leaderboard = False
+        entries = []
+
+        for cleaned in cleaned_lines:
+            lowered = cleaned.lower()
+            if lowered == "leaderboard_start":
+                in_leaderboard = True
+                continue
+            if lowered == "leaderboard_end":
+                in_leaderboard = False
+                continue
+            if not in_leaderboard or not cleaned:
+                continue
+            if cleaned.upper() == "FINAL SCORES":
+                continue
+
+            parts = cleaned.split("|", 2)
+            if len(parts) != 3:
+                continue
+            place_str, player_name, score_str = parts
+            if not place_str.isdigit() or not score_str.isdigit():
+                continue
+            entries.append((int(place_str), player_name, int(score_str)))
+
+        ConsoleLogger.clear_console()
+        ConsoleLogger.leaderboard("Final Scores", entries)
+
+    def _prompt_post_game_choice(self, send_line):
+        """Prompt user to return to lobby or exit after leaderboard."""
+        while True:
+            ConsoleLogger.prompt("Type 'lobby' to return to lobby or 'exit' to quit:")
+            choice = self.input_func().strip().lower()
+            if choice in ("lobby", "exit"):
+                send_line(choice)
+                if choice == "exit" and self.client:
+                    self.client.is_running = False
+                return
+            ConsoleLogger.error("Invalid choice. Type 'lobby' or 'exit'.")

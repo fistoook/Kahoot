@@ -15,6 +15,7 @@ from KahootStateMachine import (
     KahootStateMachine,
     STATE_AWAITING_USERNAME,
     STATE_IN_LOBBY,
+    STATE_POST_GAME,
 )
 
 
@@ -27,7 +28,7 @@ class KahootServer:
     def __init__(self, host='127.0.0.1', port=5555):
         """Initialize Kahoot server with state machine for concurrent client handling."""
         self.server_address = (host, port)
-        self.num_players = 50
+        self.num_players = 100  # Max players per game (can be adjusted)
         self.clients = []  # List of Player objects
         self.server_socket = socket.socket()
         self.server_socket.bind(self.server_address)
@@ -60,7 +61,7 @@ class KahootServer:
         # Main event loop
         while True:
             # Monitor server socket + all active client sockets
-            readable_sockets = [self.server_socket] + list(self.client_state.keys())
+            readable_sockets = [self.server_socket] + list(self.client_state.keys()) # Only monitor sockets that are in a valid state
             readable, _, _ = select.select(readable_sockets, [], [], 0.1)  # 100ms timeout
 
             # Handle new connections
@@ -80,7 +81,7 @@ class KahootServer:
 
             # Handle messages from existing clients
             for sock in readable:
-                if sock is self.server_socket:
+                if sock is self.server_socket: # Already handled above, skip to avoid double processing
                     continue
                 self._handle_client_message(sock)
             
@@ -88,8 +89,9 @@ class KahootServer:
             finished_rooms = self.game_control.update_active_games()
             for room in finished_rooms:
                 for player in list(room.players):
-                    self.client_state[player.conn] = STATE_IN_LOBBY
-                self.state_machine.close_room(room)
+                    self.client_state[player.conn] = STATE_POST_GAME
+                if room.room_id in self.game_control.rooms:
+                    del self.game_control.rooms[room.room_id]
 
             # Update header when counts change
             ConsoleLogger.update_server_header(

@@ -8,6 +8,7 @@ STATE_IN_LOBBY = "in_lobby"
 STATE_HOSTING = "hosting"
 STATE_IN_ROOM = "in_room"
 STATE_IN_GAME = "in_game"
+STATE_POST_GAME = "post_game"
 STATE_AWAITING_QUESTION_COUNT = "awaiting_question_count"
 STATE_AWAITING_THEME = "awaiting_theme"
 
@@ -42,6 +43,8 @@ class KahootStateMachine:
             pass
         elif state == STATE_IN_GAME:
             self._handle_game_answer(sock, text)
+        elif state == STATE_POST_GAME:
+            self._handle_post_game_choice(sock, text)
 
     def _handle_username(self, sock, username):
         """Process username submission and add player to lobby."""
@@ -219,6 +222,42 @@ class KahootStateMachine:
         else:
             self.network_helper.send_line(sock, "Invalid answer. Type 1, 2, 3, or 4 and press Enter.")
 
+    def _handle_post_game_choice(self, sock, text):
+        """Handle player choice after final leaderboard."""
+        choice = text.strip().lower()
+        player = self.socket_to_player.get(sock)
+        room = self.client_data.get(sock, {}).get("room")
+
+        if choice == "lobby":
+            self.client_state[sock] = STATE_IN_LOBBY
+            if room:
+                self.client_data[sock].pop("room", None)
+            self.network_helper.send_line(
+                sock,
+                "Returned to lobby. Type 'Host <game name>' to host, 'Join <room ID>' to join, or 'View Rooms' to see available rooms:",
+            )
+            return
+
+        if choice == "exit":
+            self.client_state.pop(sock, None)
+            self.client_data.pop(sock, None)
+
+            if room and player and player in room.players:
+                room.players.remove(player)
+                room.scores.pop(player, None)
+
+            if player in self.clients:
+                self.clients.remove(player)
+            self.socket_to_player.pop(sock, None)
+
+            try:
+                sock.close()
+            except OSError:
+                pass
+            return
+
+        self.network_helper.send_line(sock, "Invalid choice. Type 'lobby' or 'exit':")
+
     def close_room(self, room):
         """Close a room and return players to lobby."""
         if room.room_id not in self.game_control.rooms:
@@ -227,5 +266,7 @@ class KahootStateMachine:
         # Reset all players in the room back to lobby.
         for player in list(room.players):
             self.client_state[player.conn] = STATE_IN_LOBBY
+            if player.conn in self.client_data:
+                self.client_data[player.conn].pop("room", None)
 
         del self.game_control.rooms[room.room_id]

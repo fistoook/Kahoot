@@ -183,10 +183,6 @@ class ConsoleLogger:
 {Style.RESET_ALL}
         """
         print(welcome_text)
-    @staticmethod
-    def question(question_text):
-        """Display a question with blue [QUESTION] prefix."""
-        print(f"{Fore.BLUE}{Style.BRIGHT}[QUESTION]{Style.RESET_ALL} {question_text}")
 
     @staticmethod
     def option(option_text, option_number):
@@ -196,15 +192,15 @@ class ConsoleLogger:
     @staticmethod
     def question_counter(counter):
         """Display a question counter in cyan."""
-        print(f"{Fore.CYAN}{Style.BRIGHT}[{counter}]{Style.RESET_ALL}")
-
-    @staticmethod
-    def question(question_number):
-        """Display a question number in cyan."""
-        question = pyfiglet.figlet_format(f"Question {question_number}", font="slant")
+        question = pyfiglet.figlet_format(f"{counter}", font="slant")
         if ConsoleLogger._server_console_enabled:
             return
         print(f"{Fore.CYAN}{Style.BRIGHT}{question}{Style.RESET_ALL}")
+
+    @staticmethod
+    def question_text(question_text):
+        """Display a question number in cyan."""
+        print(f"{Fore.CYAN}{Style.BRIGHT}{question_text}{Style.RESET_ALL}")
     
     @staticmethod
     def Welcome():
@@ -261,48 +257,27 @@ class ConsoleLogger:
 
     @staticmethod
     def leaderboard(title, entries):
-        """Display a styled leaderboard with title and ranked entries.
-        
-        Args:
-            title: Title of the leaderboard (e.g., "FINAL SCORES")
-            entries: List of tuples (place_number, player_name, score)
-        """
+        """Display a styled leaderboard with title and ranked entries."""
         if ConsoleLogger._server_console_enabled:
             ConsoleLogger._write_table_row("", f"{title} posted ({len(entries)} players)")
             return
-        border = f"{Fore.CYAN}{'='*50}{Style.RESET_ALL}"
-        title_text = f"{Fore.CYAN}{Style.BRIGHT}{title.upper():^50}{Style.RESET_ALL}"
-        
+
+        width = 56
+        border = f"{Fore.CYAN}{'=' * width}{Style.RESET_ALL}"
+        title_text = f"{Fore.CYAN}{Style.BRIGHT}{title.upper():^{width}}{Style.RESET_ALL}"
+        header = f"{Fore.CYAN}{Style.BRIGHT}{'#':<4}{'PLAYER':<34}{'SCORE':>10}{Style.RESET_ALL}"
+
         print(f"\n{border}")
         print(title_text)
         print(border)
-        
-        for place, player, score in entries:
-            # Create medal emoji based on placement
-            if place == 1:
-                medal = "🥇"
-            elif place == 2:
-                medal = "🥈"
-            elif place == 3:
-                medal = "🥉"
-            else:
-                medal = "  "
-            
-            # Color code by placement
-            if place == 1:
-                color = Fore.YELLOW + Style.BRIGHT
-            elif place == 2:
-                color = Fore.WHITE + Style.BRIGHT
-            elif place == 3:
-                color = Fore.LIGHTBLACK_EX + Style.BRIGHT
-            else:
-                color = Fore.WHITE
-            
-            line = f"{medal} {color}{place:2d}. {player:<20s} {score:>5d} pts{Style.RESET_ALL}"
-            print(line)
-        
-        print(border + "\n")
+        print(header)
+        print(f"{Fore.CYAN}{'-' * width}{Style.RESET_ALL}")
 
+        for place, player, score in entries:
+            player_name = player[:33]
+            print(f"{Fore.WHITE}{place:<4}{player_name:<34}{score:>10} pts{Style.RESET_ALL}")
+
+        print(border + "\n")
     @staticmethod
     def init_status_bar():
         """Initialize the status bar at the top of the console."""
@@ -433,7 +408,29 @@ class ConsoleLogger:
             sys.stdout.flush()
             ConsoleLogger._room_row += 1
 
+    @staticmethod
+    def wrong_answer():
+        """Log a wrong answer in red."""
+        print(f"{Fore.RED}{Style.BRIGHT}Wrong!{Style.RESET_ALL}")
+
+    @staticmethod
+    def correct_answer():
+        """Log a correct answer in green."""
+        print(f"{Fore.GREEN}{Style.BRIGHT}Correct!{Style.RESET_ALL}")
+
+    @staticmethod
+    def round_over(message):
+        """Log round over and show correct answer."""
+        print(f"\n{Fore.YELLOW}{Style.BRIGHT}{message}{Style.RESET_ALL}\n")
+
+    @staticmethod
+    def round_summary(summary):
+        """Log a round summary message."""
+        print(f"{Fore.CYAN}{Style.BRIGHT}{summary}{Style.RESET_ALL}")
+    
+    @staticmethod
     def clear_console():
         """Clear the console screen."""
         os.system('cls' if os.name == 'nt' else 'clear')
+
 
